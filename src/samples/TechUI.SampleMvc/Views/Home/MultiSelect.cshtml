@@ -1,0 +1,84 @@
+@model TechUI.SampleMvc.Models.MultiSelectSampleModel
+
+@{
+    ViewData["Title"] = "MultiSelect";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.MultiSelectSampleModel;
+}
+
+<h1>انتخاب چندگانه و برچسب‌ها</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>نقش‌ها:</strong> @string.Join("، ", submitted.Roles)</div>
+        <div><strong>دسته‌ها:</strong> @string.Join("، ", submitted.CategoryIds)</div>
+        <div><strong>برچسب‌ها:</strong> @string.Join("، ", submitted.Tags)</div>
+    </div>
+}
+
+<form asp-action="MultiSelect" method="post" class="row g-3">
+
+    <div class="col-md-6">
+        <label class="form-label">نقش‌ها (فیلتر کلاینت)</label>
+        @(Html.Tech().MultiSelectFor<MultiSelectSampleModel, List<string>>(m => m.Roles)
+            .Placeholder("نقش‌ها را انتخاب کنید")
+            .Filterable()
+            .Items(items => items
+                .Add("1", "مدیر سیستم")
+                .Add("2", "اپراتور")
+                .Add("3", "حسابدار")
+                .Add("4", "پشتیبان"))
+            .Events(e => e.Change("onMultiChange")))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">دسته‌بندی‌ها (فیلتر سرور)</label>
+        @(Html.Tech().MultiSelectFor<MultiSelectSampleModel, List<int>>(m => m.CategoryIds)
+            .Placeholder("دسته‌ها را جستجو کنید")
+            .Filterable()
+            .ServerFiltering()
+            .MinLength(1)
+            .DataTextField("Text")
+            .DataValueField("Id")
+            .DataSource(ds => ds.Read("GetDropDownList", "Home"))
+            .Events(e => e.Change("onMultiChange")))
+    </div>
+
+    <div class="col-12">
+        <label class="form-label">برچسب‌ها (Tag Input)</label>
+        @(Html.Tech().MultiSelectFor<MultiSelectSampleModel, List<string>>(m => m.Tags)
+            .Placeholder("برچسب بنویسید و Enter بزنید")
+            .Filterable(false)
+            .AllowCustom()
+            .Events(e => e.Change("onMultiChange")))
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="readValues()">مقادیر انتخاب‌شده</button>
+        <div class="mt-2 text-muted" id="multiLog"></div>
+    </div>
+
+</form>
+
+<script>
+    function onMultiChange(e) {
+        document.getElementById('multiLog').textContent =
+            'مقادیر: ' + JSON.stringify(e.values);
+    }
+
+    function readValues() {
+        const roots = document.querySelectorAll('.tech-multiselect');
+        const result = [];
+
+        roots.forEach(function (root) {
+            result.push(root._techMultiSelect
+                ? root._techMultiSelect.getValues()
+                : []);
+        });
+
+        document.getElementById('multiLog').textContent =
+            JSON.stringify(result);
+    }
+</script>

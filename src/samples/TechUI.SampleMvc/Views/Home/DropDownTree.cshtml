@@ -1,0 +1,199 @@
+@model TechUI.SampleMvc.Models.DropDownTreeSampleModel
+
+@{
+    ViewData["Title"] = "DropDownTree";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.DropDownTreeSampleModel;
+}
+
+<h1>DropDownTree</h1>
+
+<p class="text-muted">
+    انتخاب از ساختار درختی داخل یک dropdown؛ انتخاب تکی، انتخاب چندتایی
+    با چک‌باکس آبشاری، جستجوی کلاینتی و تمپلیت کلاینت.
+</p>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div>
+            دسته‌بندی: <strong>@(string.IsNullOrEmpty(submitted.Category) ? "—" : submitted.Category)</strong>
+        </div>
+        <div>
+            حوزه‌ها:
+            <strong>@(submitted.Areas.Count == 0 ? "—" : string.Join("، ", submitted.Areas))</strong>
+        </div>
+    </div>
+}
+
+<form asp-action="DropDownTree" method="post" class="row g-4">
+
+    <div class="col-lg-6">
+
+        <label class="form-label" for="categoryDropTree-control">
+            دسته‌بندی (تکی + فیلتر + تمپلیت)
+        </label>
+
+        @(Html.Tech().DropDownTreeFor<DropDownTreeSampleModel, string?>(m => m.Category)
+            .Id("categoryDropTree")
+            .Placeholder("انتخاب دسته‌بندی...")
+            .Filterable()
+            .ClientTemplate("<span class=\"fw-semibold\">#: text #</span> <span class=\"badge text-bg-secondary\">#: count #</span>")
+            .Items(items => items
+                .Add("digital", "کالای دیجیتال", node => node
+                    .Icon("phone")
+                    .Expanded()
+                    .Data("count", 3)
+                    .Children(children => children
+                        .Add("mobile", "موبایل", child => child
+                            .Icon("phone")
+                            .Data("count", 2))
+                        .Add("laptop", "لپ‌تاپ", child => child
+                            .Icon("laptop")
+                            .Data("count", 5))
+                        .Add("tablet", "تبلت", child => child
+                            .Icon("tablet")
+                            .Disabled()
+                            .Data("count", 0))))
+                .Add("clothing", "پوشاک", node => node
+                    .Icon("bag")
+                    .Data("count", 12)
+                    .Children(children => children
+                        .Add("men", "مردانه", child => child.Data("count", 7))
+                        .Add("women", "زنانه", child => child.Data("count", 5))))
+                .Add("books", "کتاب", node => node
+                    .Icon("book")
+                    .Disabled()
+                    .Data("count", 18)))
+            .Select("onCategorySelect")
+            .Change("onCategoryChange"))
+
+        <div class="form-text">
+            انتخاب یک نود، پنل را می‌بندد. مقدار انتخاب‌شده در hidden input
+            برای ارسال فرم قرار می‌گیرد.
+        </div>
+
+        <div class="mt-2 small text-muted">
+            متن انتخاب‌شده: <strong id="categoryText">—</strong>
+            <br />
+            مقدار ارسالی: <strong id="categoryValue">—</strong>
+        </div>
+
+    </div>
+
+    <div class="col-lg-6">
+
+        <label class="form-label" for="areaDropTree-control">
+            حوزه‌های پشتیبانی (چندتایی + چک‌باکس آبشاری)
+        </label>
+
+        @(Html.Tech().DropDownTreeFor<DropDownTreeSampleModel, List<string>>(m => m.Areas)
+            .Id("areaDropTree")
+            .Placeholder("انتخاب حوزه‌ها...")
+            .CheckBoxes()
+            .Filterable()
+            .ExpandAll()
+            .Clearable()
+            .Items(items => items
+                .Add("shipping", "ارسال", node => node
+                    .Icon("truck")
+                    .Children(children => children
+                        .Add("express", "پست پیشتاز")
+                        .Add("normal", "پست عادی")
+                        .Add("pickup", "تحویل حضوری")))
+                .Add("payment", "پرداخت", node => node
+                    .Icon("credit-card")
+                    .Children(children => children
+                        .Add("online", "آنلاین")
+                        .Add("cash", "در محل")))
+                .Add("support", "پشتیبانی", node => node
+                    .Icon("headset")
+                    .Children(children => children
+                        .Add("chat", "چت آنلاین")
+                        .Add("phone", "تلفنی"))))
+            .Change("onAreaChange")
+            .Check("onAreaCheck"))
+
+        <div class="mt-2 small text-muted">
+            مقادیر ارسالی: <strong id="areaValues">—</strong>
+            <br />
+            شناسه‌های تیک‌خورده: <strong id="areaChecked">—</strong>
+        </div>
+
+        <div class="mt-3 d-flex flex-wrap gap-2">
+            <button type="button" id="areaOpen"
+                    class="btn btn-sm btn-outline-secondary">
+                باز کردن
+            </button>
+            <button type="button" id="areaClose"
+                    class="btn btn-sm btn-outline-secondary">
+                بستن
+            </button>
+            <button type="button" id="areaSelect"
+                    class="btn btn-sm btn-outline-secondary">
+                انتخاب «پست عادی»
+            </button>
+            <button type="button" id="areaClear"
+                    class="btn btn-sm btn-outline-danger">
+                پاک کردن
+            </button>
+        </div>
+
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">ارسال فرم</button>
+        <a asp-action="DropDownTree" class="btn btn-outline-secondary">
+            بازنشانی
+        </a>
+    </div>
+
+</form>
+
+@section Scripts {
+
+    <script>
+        function onCategorySelect(ev) {
+
+            document.getElementById('categoryText').textContent =
+                ev.text || '—';
+        }
+
+        function onCategoryChange(ev) {
+
+            document.getElementById('categoryValue').textContent =
+                ev.value || '—';
+        }
+
+        function onAreaChange(ev) {
+
+            document.getElementById('areaValues').textContent =
+                ev.values.length ? ev.values.join('، ') : '—';
+        }
+
+        function onAreaCheck(ev) {
+
+            document.getElementById('areaChecked').textContent =
+                ev.checked.length ? ev.checked.join('، ') : '—';
+        }
+
+        const areaTree = function () {
+            return Tech.DropDownTree.get('areaDropTree');
+        };
+
+        document.getElementById('areaOpen')
+            .addEventListener('click', function () { areaTree().open(); });
+
+        document.getElementById('areaClose')
+            .addEventListener('click', function () { areaTree().close(); });
+
+        document.getElementById('areaSelect')
+            .addEventListener('click', function () {
+                areaTree().select('normal');
+            });
+
+        document.getElementById('areaClear')
+            .addEventListener('click', function () { areaTree().clear(); });
+    </script>
+
+}

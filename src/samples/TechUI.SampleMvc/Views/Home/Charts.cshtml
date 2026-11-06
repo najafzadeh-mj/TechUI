@@ -1,0 +1,340 @@
+@using TechUI.Mvc.Chart
+@{
+    ViewData["Title"] = "Charts";
+}
+
+<h1>گالری نمودارها</h1>
+<p class="text-muted">
+    همه‌ی نمودارها با SVG خالص، بدون وابستگی خارجی و با پشتیبانی از تم تاریک و
+    قالب‌های رنگی TechUI رندر می‌شوند. روی سری‌ها نگه دارید تا tooltip ببینید و
+    برای خاموش/روشن کردن هر سری روی legend کلیک کنید.
+</p>
+
+<button type="button"
+        class="btn btn-sm btn-outline-primary mb-3"
+        onclick="chartApiDemo()">
+    به‌روزرسانی نمودار اول با API
+</button>
+
+<div class="row g-4" dir="rtl" lang="fa">
+
+    <div class="col-12 col-xl-8">
+        @(Html.Tech().Chart("chartColumn")
+            .Type(ChartTypes.Column)
+            .Title("فروش کانال‌ها")
+            .Subtitle("تعداد سفارش در چهار ماه نخست سال")
+            .Height(340)
+            .Categories("فروردین", "اردیبهشت", "خرداد", "تیر")
+            .ValueFormat("number")
+            .YAxis(axis => axis.Title("سفارش").Format("number"))
+            .Series("حضوری", 320, 410, 380, 520)
+            .Series("آنلاین", 240, 280, 350, 440)
+            .Series("تلفنی", 120, 150, 110, 180)
+            .Tooltip()
+            .Legend())
+    </div>
+
+    <div class="col-12 col-xl-4">
+        @(Html.Tech().Chart("chartDonut")
+            .Type(ChartTypes.Donut)
+            .Title("سهم کانال‌های فروش")
+            .Subtitle("مجموع سفارش‌ها")
+            .Height(340)
+            .Categories("حضوری", "آنلاین", "تلفنی", "نمایندگی")
+            .Donut(0.64, "۱٬۸۴۰")
+            .ValueFormat("number")
+            .Series("سفارش‌ها", 720, 610, 310, 200))
+    </div>
+
+    <div class="col-12 col-xl-8">
+        @(Html.Tech().Chart("chartStacked")
+            .Type(ChartTypes.Column)
+            .Title("درآمد به تفکیک محصول")
+            .Subtitle("ستونی انباشته")
+            .Height(340)
+            .Categories("فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد")
+            .Stacked()
+            .ValueFormat("currency")
+            .YAxis(axis => axis.Format("compact").Title("درآمد"))
+            .Series("دیجیتال", 120, 148, 132, 168, 190)
+            .Series("پوشاک", 80, 92, 105, 98, 112)
+            .Series("خانه", 45, 52, 61, 58, 66))
+    </div>
+
+    <div class="col-12 col-xl-4">
+        @(Html.Tech().Chart("chartPie")
+            .Type(ChartTypes.Pie)
+            .Title("ترافیک ورودی")
+            .Height(340)
+            .Categories("جستجو", "مستقیم", "شبکه اجتماعی", "ایمیل")
+            .ValueFormat("percent")
+            .Series("بازدید", 46, 24, 18, 12))
+    </div>
+
+    <div class="col-12 col-xl-8">
+        @(Html.Tech().Chart("chartMixed")
+            .Type(ChartTypes.Column)
+            .Title("فروش در برابر هدف")
+            .Subtitle("ترکیب ستون و خط منحنی"
+                + " — سری هدف با خط‌چین")
+            .Height(340)
+            .Categories("شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه")
+            .ValueFormat("number")
+            .Series(series => series.Title("فروش").Values(120, 138, 126, 154, 168, 142))
+            .Series(series => series
+                .Title("هدف")
+                .Type(ChartTypes.Spline)
+                .Values(130, 135, 140, 145, 150, 155)
+                .Dashed())
+            .DataLabels()
+            .Tooltip())
+    </div>
+
+    <div class="col-12 col-xl-4">
+        @(Html.Tech().Chart("chartArea")
+            .Type(ChartTypes.AreaSpline)
+            .Title("نرخ تبدیل")
+            .Subtitle("روند شش هفته")
+            .Height(340)
+            .Categories("هفته ۱", "هفته ۲", "هفته ۳", "هفته ۴", "هفته ۵", "هفته ۶")
+            .ValueFormat("percent")
+            .Series("نرخ", 2.4, 2.9, 3.4, 3.1, 3.8, 4.2))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartLine")
+            .Type(ChartTypes.Line)
+            .Title("بازدید روزانه")
+            .Height(340)
+            .Categories("شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه")
+            .ValueFormat("compact")
+            .Series(series => series.Title("بازدید").Values(1820, 2140, 1980, 2360, 2780, 2540, 1680))
+            .Series(series => series.Title("کاربر یکتا").Values(940, 1080, 1020, 1240, 1420, 1310, 880))
+            .DataLabels(false))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartStep")
+            .Type(ChartTypes.Step)
+            .Title("موجودی انبار")
+            .Height(340)
+            .Categories("فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد")
+            .ValueFormat("number")
+            .YAxis(axis => axis.Title("عدد"))
+            .Series("موجودی", 420, 380, 410, 360, 300))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartHorizontal")
+            .Type(ChartTypes.Bar)
+            .Title("پرفروش‌ترین دسته‌ها")
+            .Subtitle("نمودار میله‌ای افقی")
+            .Height(340)
+            .Categories("موبایل", "لپ‌تاپ", "هدفون", "ساعت هوشمند", "لوازم خانگی")
+            .ValueFormat("number")
+            .XAxis(axis => axis.Format("number"))
+            .Series("تعداد", 540, 410, 380, 260, 190)
+            .DataLabels())
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartScatter")
+            .Type(ChartTypes.Scatter)
+            .Title("رابطه تبلیغات و فروش")
+            .Subtitle("پراکندگی")
+            .Height(340)
+            .ValueFormat("number")
+            .XAxis(axis => axis.Title("هزینه تبلیغات").Format("compact"))
+            .YAxis(axis => axis.Title("فروش").Format("compact"))
+            .Series(series => series
+                .Title("کمپین‌ها")
+                .Points(
+                    (12, 42), (18, 55), (24, 61), (31, 74),
+                    (38, 72), (44, 89), (52, 96), (61, 108),
+                    (68, 104), (74, 121)))
+            .Tooltip())
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartBubble")
+            .Type(ChartTypes.Bubble)
+            .Title("اندازه بازار محصولات")
+            .Subtitle("حباب = سهم بازار")
+            .Height(340)
+            .ValueFormat("compact")
+            .XAxis(axis => axis.Title("قیمت"))
+            .YAxis(axis => axis.Title("رضایت"))
+            .Series(series => series
+                .Title("محصولات")
+                .Bubbles(
+                    (30, 72, 8), (48, 81, 14), (62, 66, 22),
+                    (78, 88, 30), (92, 79, 18), (110, 92, 26)))
+            .Tooltip())
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartRadar")
+            .Type(ChartTypes.Radar)
+            .Title("مقایسه شاخص‌ها")
+            .Subtitle("امتیاز از ۱۰۰")
+            .Height(340)
+            .Categories("سرعت", "کیفیت", "قیمت", "پشتیبانی", "طراحی", "ماندگاری")
+            .ValueFormat("number")
+            .YAxis(axis => axis.Max(100))
+            .Series("محصول الف", 82, 74, 66, 88, 79, 71)
+            .Series("محصول ب", 68, 85, 72, 64, 90, 83))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartGauge")
+            .Type(ChartTypes.Gauge)
+            .Title("رضایت مشتری")
+            .Subtitle("درصد از هدف ۱۰۰")
+            .Height(300)
+            .Gauge(0, 100, 85)
+            .ValueFormat("percent")
+            .Series("رضایت", 78)
+            .Legend(false))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartRadialBar")
+            .Type(ChartTypes.RadialBar)
+            .Title("پیشرفت اهداف")
+            .Height(320)
+            .YAxis(axis => axis.Max(100))
+            .ValueFormat("percent")
+            .Series("فروش", 82)
+            .Series("مشتری جدید", 64)
+            .Series("رضایت", 91))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartHeatmap")
+            .Type(ChartTypes.Heatmap)
+            .Title("ترافیک ساعتی")
+            .Subtitle("سطرها شیفت‌ها و ستون‌ها روزهای هفته")
+            .Height(320)
+            .Categories("شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه")
+            .DataLabels()
+            .ValueFormat("number")
+            .Series("صبح", 22, 30, 26, 34, 40)
+            .Series("بعدازظهر", 44, 48, 52, 46, 58)
+            .Series("شب", 18, 24, 20, 28, 32))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartFunnel")
+            .Type(ChartTypes.Funnel)
+            .Title("قیف فروش")
+            .Subtitle("از بازدید تا خرید")
+            .Height(320)
+            .Categories("بازدید", "افزودن به سبد", "شروع پرداخت", "خرید موفق")
+            .ValueFormat("number")
+            .Series("کاربران", 5200, 1800, 720, 410))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartTreemap")
+            .Type(ChartTypes.Treemap)
+            .Title("سهم ارزش سبد خرید")
+            .Height(320)
+            .Categories("دیجیتال", "پوشاک", "خانه", "ورزش", "کتاب")
+            .ValueFormat("compact")
+            .Series("ارزش", 420, 260, 180, 140, 90))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartWaterfall")
+            .Type(ChartTypes.Waterfall)
+            .Title("جریان نقدی ماهانه")
+            .Subtitle("میله‌های سبز افزایش و قرمز کاهش")
+            .Height(320)
+            .Categories("شروع", "فروش", "بازگشت", "هزینه", "سرمایه‌گذاری")
+            .ValueFormat("compact")
+            .Series("جریان", 120, 68, -32, -45, 28))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartCandlestick")
+            .Type(ChartTypes.Candlestick)
+            .Title("نمودار شمعی")
+            .Subtitle("قیمت باز، بسته، بالا و پایین")
+            .Height(320)
+            .Categories("فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور")
+            .ValueFormat("number")
+            .Series(series => series
+                .Title("سهم")
+                .Candles(
+                    new ChartCandle(120, 148, 112, 142),
+                    new ChartCandle(142, 156, 132, 138),
+                    new ChartCandle(138, 168, 134, 164),
+                    new ChartCandle(164, 172, 150, 154),
+                    new ChartCandle(154, 186, 148, 180),
+                    new ChartCandle(180, 192, 168, 176))))
+    </div>
+
+    <div class="col-12 col-xl-6">
+        @(Html.Tech().Chart("chartBullet")
+            .Type(ChartTypes.Bullet)
+            .Title("عملکرد فروشندگان")
+            .Subtitle("خط عمودی = هدف")
+            .Height(320)
+            .Categories("سارا", "رضا", "مینا", "کاوه", "نگار")
+            .ValueFormat("number")
+            .XAxis(axis => axis.Max(120))
+            .Series(series => series
+                .Title("فروش")
+                .Values(96, 72, 108, 58, 84)
+                .Targets(100, 90, 100, 80, 95)))
+    </div>
+
+    <div class="col-12">
+        <h2 class="h5 mt-2">نمودارهای کوچک (Sparkline)</h2>
+    </div>
+
+    <div class="col-12 col-md-4">
+        @(Html.Tech().Chart("chartSparkLine")
+            .Type(ChartTypes.Sparkline)
+            .Title("بازدید ۷ روز")
+            .Height(90)
+            .Area()
+            .Series("بازدید", 18, 24, 21, 30, 28, 36, 42))
+    </div>
+
+    <div class="col-12 col-md-4">
+        @(Html.Tech().Chart("chartSparkBar")
+            .Type(ChartTypes.SparkBar)
+            .Title("سفارش ۷ روز")
+            .Height(90)
+            .Series("سفارش", 12, 18, 14, 22, 20, 26, 31))
+    </div>
+
+    <div class="col-12 col-md-4">
+        @(Html.Tech().Chart("chartSparkPolar")
+            .Type(ChartTypes.Polar)
+            .Title("ترکیب ترافیک")
+            .Height(260)
+            .Categories("جستجو", "مستقیم", "اجتماعی", "ایمیل")
+            .Series("سهم", 42, 26, 20, 12))
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        window.chartApiDemo = function () {
+            const chart = Tech.Chart.get('chartColumn');
+
+            if (!chart) return;
+
+            chart.update({
+                series: [
+                    { name: 'حضوری', data: [280, 450, 400, 560] },
+                    { name: 'آنلاین', data: [260, 300, 370, 420] },
+                    { name: 'تلفنی', data: [140, 160, 120, 190] }
+                ]
+            });
+        };
+    </script>
+}

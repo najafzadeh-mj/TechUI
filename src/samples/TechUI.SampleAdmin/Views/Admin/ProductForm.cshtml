@@ -1,0 +1,127 @@
+@model ProductFormModel
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? "ویرایش محصول" : "محصول جدید";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">@ViewData["Title"]</h2>
+        <p class="text-muted small mb-0">
+            دسته‌بندی از سرور با جستجوی زنده بارگذاری می‌شود و کد کالا باید یکتا باشد.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Products">
+        <i class="bi bi-arrow-right"></i>
+        بازگشت به فهرست
+    </a>
+</div>
+
+<form asp-controller="Admin"
+      asp-action="@(isEdit ? "ProductEdit" : "ProductCreate")"
+      method="post"
+      class="admin-card form-card p-4"
+      novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            لطفاً خطاهای مشخص‌شده را برطرف کنید.
+        </div>
+    }
+
+    <div class="form-grid">
+        <div>
+            <label class="form-label" for="Name">نام محصول</label>
+            @(Html.Tech().TextBoxFor<ProductFormModel, string>(m => m.Name)
+                .Placeholder("مثلاً هدفون بی‌سیم پرو")
+                .PrefixIcon("box-seam")
+                .MaxLength(160)
+                .Clearable())
+        </div>
+
+        <div>
+            <label class="form-label" for="Sku">کد کالا</label>
+            @(Html.Tech().TextBoxFor<ProductFormModel, string>(m => m.Sku)
+                .Placeholder("SKU-0001")
+                .PrefixIcon("upc-scan")
+                .MaxLength(40)
+                .Direction("ltr"))
+            <div class="form-hint">شناسه یکتای کالا در انبار.</div>
+        </div>
+
+        <div>
+            <label class="form-label" for="CategoryId">دسته‌بندی</label>
+            @(Html.Tech().DropDownListFor<ProductFormModel, int?>(m => m.CategoryId)
+                .DataSource(ds => ds
+                    .Read("CategoryLookup", "Admin")
+                    .Type(TechHttpMethod.Get))
+                .DataTextField("text")
+                .DataValueField("value")
+                .OptionLabel("انتخاب دسته‌بندی...")
+                .Filterable()
+                .ServerFiltering()
+                .MinLength(1))
+        </div>
+
+        <div>
+            <label class="form-label" for="Price">قیمت (ریال)</label>
+            @(Html.Tech().NumericTextBoxFor<ProductFormModel, decimal>(m => m.Price)
+                .Min(1_000)
+                .Max(5_000_000_000)
+                .Step(100_000)
+                .Decimals(0)
+                .Culture("fa-IR")
+                .SuffixIcon("currency-exchange"))
+        </div>
+
+        <div>
+            <label class="form-label" for="Stock">موجودی انبار</label>
+            @(Html.Tech().NumericTextBoxFor<ProductFormModel, int>(m => m.Stock)
+                .Min(0)
+                .Max(100_000)
+                .Step(1)
+                .Culture("fa-IR")
+                .SuffixIcon("boxes"))
+        </div>
+
+        <div>
+            <label class="form-label" for="CreatedOn">تاریخ ثبت</label>
+            @(Html.Tech().DatePickerFor<ProductFormModel, DateTime>(m => m.CreatedOn)
+                .Max(DateTime.Today)
+                .TodayButton())
+        </div>
+
+        <div class="span-2">
+            <label class="form-label" for="Description">توضیحات</label>
+            @(Html.Tech().EditorFor<ProductFormModel, string?>(m => m.Description)
+                .Height(180)
+                .Placeholder("ویژگی‌ها و توضیحات محصول...")
+                .Tools("bold", "italic", "underline", "ul", "ol", "link", "clear")
+                .MaxLength(4000)
+                .ShowCounter())
+            <div class="form-hint">
+                قالب‌بندی متن برای صفحه محصول ذخیره می‌شود.
+            </div>
+        </div>
+
+        <div class="span-2">
+            @(Html.Tech().CheckBoxFor<ProductFormModel, bool>(m => m.IsActive)
+                .Label("محصول فعال است و در فروشگاه نمایش داده می‌شود.")
+                .Switch())
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Products">
+            انصراف
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2"></i>
+            @(isEdit ? "ذخیره تغییرات" : "ثبت محصول")
+        </button>
+    </div>
+</form>

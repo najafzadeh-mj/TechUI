@@ -1,0 +1,131 @@
+@inject SettingsService AppSettings
+@{
+    ViewData["Title"] = "مشتریان";
+
+    var defaultPageSize = AppSettings.Load().DefaultPageSize;
+    var pageSizes = new[] { 10, defaultPageSize, 25, 50 }
+        .Distinct()
+        .OrderBy(size => size)
+        .ToArray();
+}
+
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">مدیریت مشتریان</h2>
+        <p class="text-muted small mb-0">
+            جستجو، فیلتر، مرتب‌سازی و صفحه‌بندی سمت سرور با TechUI Grid.
+        </p>
+    </div>
+
+    <div class="input-group admin-quick-search">
+        <span class="input-group-text bg-transparent">
+            <i class="bi bi-search"></i>
+        </span>
+        <input type="search" id="customerQuickSearch" class="form-control"
+               placeholder="جستجوی سریع نام..." aria-label="جستجوی مشتری" />
+        <button type="button" class="btn btn-outline-secondary"
+                onclick="quickSearchCustomers()">
+            جستجو
+        </button>
+    </div>
+</div>
+
+@(Html.Tech().Grid<Customer>()
+    .Name("customersGrid")
+    .DataSource(ds => ds
+        .Read("CustomerGrid", "Admin")
+        .Type(TechHttpMethod.Post))
+    .Pageable()
+    .Sortable()
+    .Filterable()
+    .Resizable()
+    .PageSize(defaultPageSize)
+    .PageSizes(pageSizes)
+    .Height(620)
+    .Toolbar(t =>
+    {
+        t.Create("مشتری جدید", "onCustomerCreate");
+        t.Refresh("بازخوانی");
+        t.ColumnChooser();
+    })
+    .Columns(c =>
+    {
+        c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(85);
+
+        c.Bound(x => x.FullName)
+            .Title("نام و نام خانوادگی")
+            .Width(210);
+
+        c.Bound(x => x.Email)
+            .Title("ایمیل")
+            .Width(230);
+
+        c.Bound(x => x.City)
+            .Title("شهر")
+            .Width(110);
+
+        c.Template("{{= formatNumber(Credit) }} ریال")
+            .Title("اعتبار حساب")
+            .Width(150)
+            .Filterable(false);
+
+        c.Template("{{= formatDate(RegisteredOn) }}")
+            .Title("تاریخ عضویت")
+            .Width(130)
+            .Filterable(false);
+
+        c.Template(
+            "{{ if (IsActive) { }}" +
+            "<span class='badge bg-success'>فعال</span>" +
+            "{{ } else { }}" +
+            "<span class='badge bg-secondary'>غیرفعال</span>" +
+            "{{ } }}")
+            .Title("وضعیت")
+            .Width(100)
+            .Filterable(false);
+
+        c.Template(
+            "<a class='btn btn-sm btn-outline-primary me-1' " +
+            "href='/Admin/CustomerEdit/{{Id}}' title='ویرایش'>" +
+            "<i class='bi bi-pencil'></i></a>" +
+            "<button type='button' class='btn btn-sm btn-outline-danger' " +
+            "onclick='deleteCustomer({{Id}})' title='حذف'>" +
+            "<i class='bi bi-trash'></i></button>")
+            .Title("عملیات")
+            .Width(125);
+    }))
+
+@section Scripts {
+    <script>
+        function onCustomerCreate() {
+            window.location.href = '@Url.Action("CustomerCreate", "Admin")';
+        }
+
+        function quickSearchCustomers() {
+
+            const term = document.getElementById('customerQuickSearch').value.trim();
+            const grid = Tech.Grid.get('customersGrid');
+
+            if (!grid) return;
+
+            if (term) {
+                grid.setFilter('FullName', term, 'contains');
+            }
+            else {
+                grid.clearFilters();
+            }
+
+            grid.refresh();
+        }
+
+        document.getElementById('customerQuickSearch')
+            .addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    quickSearchCustomers();
+                }
+            });
+    </script>
+}

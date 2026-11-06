@@ -1,0 +1,220 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@inject SettingsService AppSettings
+@{
+    var requestToken = Antiforgery.GetAndStoreTokens(Context).RequestToken;
+    var activeNav = ViewData["ActiveNav"] as string ?? string.Empty;
+    var appSettings = AppSettings.Load();
+
+    string NavClass(string key) =>
+        activeNav == key ? "admin-nav-link active" : "admin-nav-link";
+
+    var breadcrumbTrail = ViewData["Breadcrumb"] as IEnumerable<(string Text, string? Action)>
+        ?? new (string Text, string? Action)[]
+        {
+            ("پنل", "Index"),
+            (ViewData["Title"]?.ToString() ?? string.Empty, null)
+        };
+
+    var breadcrumb = Html.Tech().Breadcrumb("adminBreadcrumb").Compact();
+
+    foreach (var crumb in breadcrumbTrail)
+    {
+        breadcrumb.Item(
+            crumb.Text,
+            crumb.Action is null ? null : Url.Action(crumb.Action, "Admin"),
+            null);
+    }
+}
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="__RequestVerificationToken" content="@requestToken" />
+    <title>@ViewData["Title"] - @appSettings.StoreName</title>
+
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('tech-theme')
+                    || '@(appSettings.DarkMode ? "dark" : "light")';
+                var preset = localStorage.getItem('tech-theme-preset')
+                    || '@appSettings.ThemePreset';
+
+                if (theme === 'dark' || theme === 'light') {
+                    document.documentElement.setAttribute('data-tech-theme', theme);
+                    document.documentElement.setAttribute('data-bs-theme', theme);
+                }
+
+                document.documentElement.setAttribute('data-tech-preset', preset);
+            }
+            catch { }
+        })();
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/_content/TechUI.Mvc/css/techui.css" />
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <div class="admin-shell">
+        <aside class="admin-sidebar" id="adminSidebar">
+            <a class="admin-brand" asp-controller="Admin" asp-action="Index">
+                <span class="admin-brand-mark">@(appSettings.StoreName.FirstOrDefault())</span>
+                <span class="admin-brand-text">
+                    <strong>@appSettings.StoreName</strong>
+                    <small>پنل مدیریت فروشگاه</small>
+                </span>
+            </a>
+
+            <nav class="admin-nav" aria-label="منوی اصلی">
+                <span class="admin-nav-title">عمومی</span>
+                <a class="@NavClass("dashboard")" asp-controller="Admin" asp-action="Index">
+                    <i class="bi bi-grid-1x2"></i>
+                    <span>داشبورد</span>
+                </a>
+
+                <span class="admin-nav-title">فروش</span>
+                <a class="@NavClass("customers")" asp-controller="Admin" asp-action="Customers">
+                    <i class="bi bi-people"></i>
+                    <span>مشتریان</span>
+                </a>
+                <a class="@NavClass("products")" asp-controller="Admin" asp-action="Products">
+                    <i class="bi bi-box-seam"></i>
+                    <span>محصولات</span>
+                </a>
+                <a class="@NavClass("orders")" asp-controller="Admin" asp-action="Orders">
+                    <i class="bi bi-bag-check"></i>
+                    <span>سفارش‌ها</span>
+                </a>
+                <a class="@NavClass("reports")" asp-controller="Admin" asp-action="Reports">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span>گزارش فروش</span>
+                </a>
+
+                <span class="admin-nav-title">سیستم</span>
+                <a class="@NavClass("settings")" asp-controller="Admin" asp-action="Settings">
+                    <i class="bi bi-gear"></i>
+                    <span>تنظیمات</span>
+                </a>
+            </nav>
+
+            <div class="admin-sidebar-footer">
+                <span class="badge rounded-pill text-bg-primary">نسخه ۱.۰</span>
+                <small>ساخته‌شده با TechUI.Mvc</small>
+            </div>
+        </aside>
+
+        <div class="admin-main">
+            <header class="admin-topbar">
+                <div class="d-flex align-items-center gap-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary d-lg-none"
+                            id="sidebarToggle" aria-label="نمایش منو">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <div>
+                        @breadcrumb
+                        <h1 class="admin-page-title">@ViewData["Title"]</h1>
+                    </div>
+                </div>
+
+                <div class="admin-topbar-actions">
+                    <a class="btn btn-sm btn-primary d-none d-md-inline-flex"
+                       asp-controller="Admin" asp-action="CustomerCreate">
+                        <i class="bi bi-person-plus"></i>
+                        <span>مشتری جدید</span>
+                    </a>
+
+                    <select id="presetPicker" class="form-select form-select-sm admin-preset"
+                            aria-label="قالب رنگی">
+                        <option value="default">آبی</option>
+                        <option value="emerald">زمردی</option>
+                        <option value="violet">بنفش</option>
+                        <option value="rose">رز</option>
+                        <option value="amber">کهربایی</option>
+                        <option value="slate">خاکستری</option>
+                    </select>
+
+                    <button type="button" id="themeToggle"
+                            class="btn btn-sm btn-outline-secondary"
+                            aria-label="تغییر تم">
+                        <i class="bi bi-moon-stars"></i>
+                        <span class="d-none d-sm-inline" id="themeToggleText">تم تاریک</span>
+                    </button>
+
+                    <div class="admin-user" title="مدیر فروشگاه">
+                        <span class="admin-avatar">م</span>
+                        <span class="d-none d-xl-flex flex-column">
+                            <strong>مدیر فروشگاه</strong>
+                            <small>مدیر سیستم</small>
+                        </span>
+                    </div>
+                </div>
+            </header>
+
+            <main class="admin-content">
+                @RenderBody()
+            </main>
+
+            <footer class="admin-footer">
+                <span>@appSettings.FooterText</span>
+                <span class="text-muted">داده‌ها در SQLite ذخیره می‌شوند.</span>
+            </footer>
+        </div>
+    </div>
+
+    <div id="admin-toast-data"
+         data-success="@TempData["Success"]"
+         data-error="@TempData["Error"]"
+         hidden></div>
+
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/_content/TechUI.Mvc/js/techui.js"></script>
+    <script>
+        Tech.addTemplateHelper('currency', function (value) {
+            var number = Number(value || 0);
+
+            return new Intl.NumberFormat('fa-IR', {
+                maximumFractionDigits: 0
+            }).format(number) + ' @appSettings.Currency';
+        });
+
+        Tech.addTemplateHelper('orderStatus', function (value) {
+            var status = Number(value);
+
+            return status === 0 ? 'در انتظار پرداخت'
+                : status === 1 ? 'پرداخت شده'
+                : status === 2 ? 'ارسال شده'
+                : status === 3 ? 'تحویل شده'
+                : status === 4 ? 'لغو شده'
+                : 'نامشخص';
+        });
+
+        Tech.addTemplateHelper('orderStatusClass', function (value) {
+            var status = Number(value);
+
+            return status === 0 ? 'bg-warning text-dark'
+                : status === 1 ? 'bg-primary'
+                : status === 2 ? 'bg-info text-dark'
+                : status === 3 ? 'bg-success'
+                : status === 4 ? 'bg-danger'
+                : 'bg-secondary';
+        });
+
+        Tech.addTemplateHelper('stockBadge', function (value) {
+            var stock = Number(value || 0);
+
+            return stock <= 0 ? 'bg-danger'
+                : stock < 10 ? 'bg-warning text-dark'
+                : 'bg-success';
+        });
+    </script>
+    <script src="~/js/admin.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

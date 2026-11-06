@@ -1,0 +1,42 @@
+@model TechUI.SampleMvc.Models.DatePickerSampleModel
+
+@{
+    ViewData["Title"] = "DatePicker";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.DatePickerSampleModel;
+}
+
+<h1>انتخاب تاریخ (جلالی)</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>تاریخ خام (میلادی):</strong> @submitted.BirthDate</div>
+        <div><strong>فرمت نمایش:</strong> @submitted.BirthDate?.ToString("yyyy/MM/dd")</div>
+    </div>
+}
+
+<form asp-action="DatePicker" method="post" class="row g-3" style="max-width: 420px;">
+
+    <div class="col-12">
+        <label class="form-label" for="BirthDate">تاریخ تولد</label>
+        @(Html.Tech().DatePickerFor<DatePickerSampleModel, DateTime?>(m => m.BirthDate)
+            .Placeholder("تاریخ تولد")
+            .Min(new DateTime(1900, 1, 1))
+            .Max(DateTime.Today)
+            .Format("yyyy/MM/dd"))
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="DatePicker" class="btn btn-outline-secondary">پاک کردن</a>
+    </div>
+
+</form>
+
+@section Scripts {
+    <script>
+        // مثال استفاده از API عمومی
+        // Tech.DatePicker.setValue('BirthDate', '2026-03-21');
+    </script>
+}

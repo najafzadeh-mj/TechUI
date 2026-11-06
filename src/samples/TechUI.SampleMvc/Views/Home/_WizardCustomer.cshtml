@@ -1,0 +1,26 @@
+@model TechUI.SampleMvc.Models.WizardSampleModel
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" asp-for="FullName"></label>
+        <input asp-for="FullName"
+               class="form-control tech-input-control"
+               placeholder="مثلاً سارا احمدی" />
+        <span asp-validation-for="FullName" class="tech-validation-message"></span>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" asp-for="Email"></label>
+        <input asp-for="Email"
+               type="email"
+               dir="ltr"
+               class="form-control tech-input-control"
+               placeholder="name@example.com" />
+        <span asp-validation-for="Email" class="tech-validation-message"></span>
+    </div>
+    <div class="col-12">
+        <div class="form-text">
+            فیلدهای این مرحله هنگام رفتن به مرحلهٔ بعد با
+            <code>Tech.validate</code> بررسی می‌شوند.
+        </div>
+    </div>
+</div>

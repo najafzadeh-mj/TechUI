@@ -1,0 +1,165 @@
+﻿@model IEnumerable<TechUI.SampleMvc.Models.UserViewModel>
+@using TechUI.SampleMvc.Models
+
+@{
+    ViewData["Title"] = "Home Page";
+}
+
+
+<h1>TechUI Grid Test</h1>
+<button class="btn btn-success mt-3" onclick="refreshGrid()">
+    Refresh Grid
+</button>
+
+
+<hr />
+
+@Html.AntiForgeryToken()
+
+<div class="row g-2 mb-3">
+    <div class="col-md-3">
+        <input id="txtCode"
+               class="form-control"
+               placeholder="کد" />
+    </div>
+
+    <div class="col-md-3">
+        <input id="txtTitle"
+               class="form-control"
+               placeholder="عنوان" />
+    </div>
+
+    <div class="col-md-2">
+        <button class="btn btn-primary w-100"
+                onclick="Tech.Grid.get('usersGrid').refresh()">
+            جستجو
+        </button>
+    </div>
+</div>
+<hr />
+<div dir="rtl">
+    @(Html.Tech().Grid<UserViewModel>()
+        .Name("usersGrid")
+        .DataSource(ds => ds.Read("GridData", "Home")
+            .Type(TechHttpMethod.Post)
+            .Data("searchGrid"))
+        .Pageable()
+        .Sortable()
+        .PageSize(17)
+        .Height(600)
+        .Filterable()
+        .Selectable()
+        .Resizable()
+        //.PageSizeSelector()
+        .PageSizes(10, 20, 50, 100, 200)
+        .Events(e => e.Change("onGridChange"))
+        .Toolbar(t =>
+        {
+            t.Create("افزودن", "onCreate");
+            t.Refresh("بازخوانی");
+            t.Custom("خروجی اکسل", "onExport", "download");
+            t.ColumnChooser();
+        })
+        .Columns(c =>
+        {
+            c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Filterable()
+            .Width(100);
+
+            c.Bound(x => x.FullName)
+            .Title("نام کامل");
+            c.Template(
+            "<a href='/Users/Edit/{{Id}}' class='btn btn-sm btn-primary'>ویرایش {{FullName}}</a>")
+            .Title("عملیات")
+            .Width(140);
+            c.Template(@"
+        {{ if (Id % 2 === 0) { }}
+        <span class='badge bg-success'>زوج</span>
+        {{ } else { }}
+        <span class='badge bg-secondary'>فرد</span>
+        {{ } }}
+        ")
+            .Title("نوع")
+            .Width(120);
+        c.Template(@"
+        <strong>{{= FullName }}</strong>
+        ")
+            .Title("نام نمایشی");
+
+        c.Template(@"
+        {{ if (IsActive) { }}
+        <span class='badge bg-success'>فعال</span>
+        {{ } else { }}
+        <span class='badge bg-danger'>غیرفعال</span>
+        {{ } }}
+        ")
+            .Title("وضعیت");
+            c.Template(@"
+        {{ for (const r of Roles) { }}
+        <span class='badge bg-info me-1'>{{= r }}</span>
+        {{ } }}
+        ")
+            .Title("نقش‌ها");
+            c.Template(@"
+        {{= badge(Id % 2 === 0 ? 'زوج' : 'فرد',
+        Id % 2 === 0 ? 'success' : 'secondary') }}
+        ")
+            .Title("نوع")
+            .Width(120);
+            c.Template(@"
+        {{= formatNumber(Id * 12500) }} تومان
+        ")
+            .Title("مبلغ")
+            .Width(150);
+            c.Template(@"
+        <div>{{= upper(FullName) }}</div>
+        <div class='small text-muted'>{{= truncate(FullName, 6) }}</div>
+        ")
+            .Title("نام")
+            .Width(220);
+            c.Template(@"
+        {{= currency(Id * 100000) }}
+        ")
+            .Title("قیمت");
+        }))
+
+</div>
+
+<script>
+
+    function searchGrid() {
+
+        return {
+            code: document.getElementById('txtCode').value,
+            title: document.getElementById('txtTitle').value
+        };
+    }
+
+
+    function onGridChange(e) {
+
+        console.log('Selected row:', e.data);
+
+        //alert(`انتخاب شد: ${e.data.fullName || e.data.FullName}`);
+    }
+
+    async function refreshGrid() 
+    {
+
+        const grid = Tech.Grid.get('usersGrid');
+
+        await grid.refresh();
+
+        //alert('Grid refreshed');
+    }
+    function onCreate() {
+        alert('Create clicked');
+    }
+
+    function onExport() {
+        alert('Export clicked');
+    }
+
+    
+</script>

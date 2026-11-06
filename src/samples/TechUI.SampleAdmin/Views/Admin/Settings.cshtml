@@ -1,0 +1,191 @@
+@model AdminSettings
+@{
+    ViewData["Title"] = "تنظیمات";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">تنظیمات فروشگاه</h2>
+        <p class="text-muted small mb-0">
+            تنظیمات در فایل <code dir="ltr">App_Data/settings.json</code> ذخیره می‌شود.
+        </p>
+    </div>
+</div>
+
+<form asp-controller="Admin" asp-action="Settings" method="post"
+      class="admin-card p-4" id="settingsForm" novalidate>
+    @Html.AntiForgeryToken()
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            لطفاً خطاهای مشخص‌شده را برطرف کنید.
+        </div>
+    }
+
+    <ul class="nav nav-tabs admin-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link active" data-bs-toggle="tab"
+                    data-bs-target="#tabGeneral" role="tab"
+                    aria-controls="tabGeneral" aria-selected="true">
+                <i class="bi bi-shop"></i>
+                عمومی
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#tabNotifications" role="tab"
+                    aria-controls="tabNotifications" aria-selected="false">
+                <i class="bi bi-bell"></i>
+                اعلان‌ها
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button type="button" class="nav-link" data-bs-toggle="tab"
+                    data-bs-target="#tabAppearance" role="tab"
+                    aria-controls="tabAppearance" aria-selected="false">
+                <i class="bi bi-palette"></i>
+                ظاهر
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content pt-4">
+        <div class="tab-pane fade show active" id="tabGeneral" role="tabpanel">
+            <div class="form-grid">
+                <div>
+                    <label class="form-label" for="StoreName">نام فروشگاه</label>
+                    @(Html.Tech().TextBoxFor<AdminSettings, string>(m => m.StoreName)
+                        .PrefixIcon("shop")
+                        .MaxLength(80))
+                </div>
+
+                <div>
+                    <label class="form-label" for="SupportEmail">ایمیل پشتیبانی</label>
+                    @(Html.Tech().TextBoxFor<AdminSettings, string>(m => m.SupportEmail)
+                        .Type("email")
+                        .PrefixIcon("envelope")
+                        .InputMode("email"))
+                </div>
+
+                <div>
+                    <label class="form-label" for="Currency">واحد پول</label>
+                    <select asp-for="Currency" class="form-select">
+                        <option value="ریال">ریال</option>
+                        <option value="تومان">تومان</option>
+                        <option value="دلار">دلار</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="form-label" for="DefaultPageSize">تعداد ردیف پیش‌فرض</label>
+                    @(Html.Tech().NumericTextBoxFor<AdminSettings, int>(m => m.DefaultPageSize)
+                        .Min(5)
+                        .Max(100)
+                        .Step(5)
+                        .Culture("fa-IR"))
+                </div>
+
+                <div class="span-2">
+                    <label class="form-label" for="FooterText">متن پاورقی</label>
+                    @(Html.Tech().TextBoxFor<AdminSettings, string>(m => m.FooterText)
+                        .MaxLength(200)
+                        .ShowCounter()
+                        .Placeholder("متن نمایش‌داده‌شده در پاورقی پنل"))
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tabNotifications" role="tabpanel">
+            <div class="d-flex flex-column gap-3">
+                @(Html.Tech().CheckBoxFor<AdminSettings, bool>(m => m.EnableNotifications)
+                    .Label("ارسال اعلان‌ها به مدیر فروشگاه فعال باشد.")
+                    .Switch())
+
+                <hr class="my-0" />
+
+                @(Html.Tech().CheckBoxFor<AdminSettings, bool>(m => m.NotifyNewOrder)
+                    .Label("اعلان هنگام ثبت سفارش جدید")
+                    .Switch())
+
+                @(Html.Tech().CheckBoxFor<AdminSettings, bool>(m => m.NotifyLowStock)
+                    .Label("اعلان هنگام کاهش موجودی محصول")
+                    .Switch())
+
+                @(Html.Tech().CheckBoxFor<AdminSettings, bool>(m => m.NotifyWeeklyReport)
+                    .Label("ارسال گزارش هفتگی ایمیلی")
+                    .Switch())
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tabAppearance" role="tabpanel">
+            <div class="form-grid">
+                <div>
+                    <label class="form-label" for="ThemePreset">قالب رنگی</label>
+                    <select asp-for="ThemePreset" class="form-select" id="ThemePreset">
+                        <option value="default">آبی</option>
+                        <option value="emerald">زمردی</option>
+                        <option value="violet">بنفش</option>
+                        <option value="rose">رز</option>
+                        <option value="amber">کهربایی</option>
+                        <option value="slate">خاکستری</option>
+                    </select>
+                    <div class="form-hint">
+                        با تغییر این گزینه، پیش‌نمایش قالب رنگی در همین صفحه اعمال می‌شود.
+                    </div>
+                </div>
+
+                <div>
+                    @(Html.Tech().CheckBoxFor<AdminSettings, bool>(m => m.DarkMode)
+                        .Label("استفاده از حالت تاریک به‌عنوان تم پیش‌فرض")
+                        .Switch())
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Index">
+            بازگشت به داشبورد
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2"></i>
+            ذخیره تنظیمات
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        (function () {
+
+            const preset = document.getElementById('ThemePreset');
+            const darkMode = document.getElementById('DarkMode');
+
+            if (preset) {
+                preset.addEventListener('change', function () {
+                    Tech.theme.setPreset(preset.value);
+                });
+            }
+
+            if (darkMode) {
+                darkMode.addEventListener('change', function () {
+                    Tech.theme.set(darkMode.checked ? 'dark' : 'light');
+                });
+            }
+
+            const form = document.getElementById('settingsForm');
+
+            if (form) {
+                form.addEventListener('submit', function () {
+                    if (preset) Tech.theme.setPreset(preset.value);
+
+                    if (darkMode) {
+                        Tech.theme.set(darkMode.checked ? 'dark' : 'light');
+                    }
+                });
+            }
+        })();
+    </script>
+}

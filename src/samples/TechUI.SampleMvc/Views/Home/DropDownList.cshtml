@@ -1,0 +1,96 @@
+﻿@using TechUI.Mvc.DropDownList
+@using TechUI.SampleMvc.Models
+@{
+    ViewData["Title"] = "Home Page";
+}
+
+
+<h1>TechUI DropDownList Test</h1>
+<hr />
+<button onclick="getDropdownListSelectedData()">داده های انتخابی</button>
+<div dir="rtl">
+    @(Html.Tech().DropDownListFor<ProductViewModel, int?>(m => m.Id).Name("CategoryddId")
+        .OptionLabel("-- انتخاب کنید --") 
+        //.Width(250)
+        .Filterable()
+        //.FilterMode(FilterMode.Contains)
+        .ServerFiltering()
+        .MinLength(2)
+        .DataTextField("Text")
+        .DataValueField("Id") 
+        .Value("2")
+        .DataSource(ds => ds.Read("GetDropDownList", "Home"))
+        .Events(e => e
+            .Change("onCategoryChange")
+            .Open("onDropdownOpen")
+            .Close("onDropdownClose")))
+
+</div>
+<hr />
+<h3> POST DropDownList</h3>
+<div dir="rtl">
+    @(Html.Tech().DropDownList("PostCategoryId")
+        .OptionLabel("-- انتخاب کنید --")
+        .Filterable()
+        .DataTextField("Text")
+        .DataValueField("Id")
+        .DataSource(ds => ds.Read("GetDropDownListPost", "Home")
+            .Type(TechHttpMethod.Post)))
+</div>
+<hr />
+<h3> Cascade DropDownList Sample</h3>
+<div dir="rtl">
+
+
+@(Html.Tech().DropDownListFor<CategoryViewModel, int?>(m => m.CategoryId)
+    //.Value(Model.CategoryId?.ToString() ?? "")
+    .OptionLabel("-- انتخاب کنید --")
+    .Filterable()
+    .DataTextField("Text")
+    .DataValueField("Id")
+    .Value("2")
+    .DataSource(m => m.Read("GetCategories", "Home")))
+
+@(Html.Tech().DropDownListFor<SubCategorytViewModel, int?>(m => m.SubCategoryId)
+    .OptionLabel("...")
+    .Filterable()
+    .DataTextField("Text")
+    .DataValueField("Id")
+    //.Value(Model.SubCategoryId?.ToString() ?? "")
+    .DataSource(m => m.Read("GetSubCategories", "Home"))
+    .CascadeFrom("CategoryId"))
+</div>
+<script>
+
+    
+
+    function onCategoryChange(e) {
+
+        const value = e.value;
+
+        const item = Tech.DropDownList.dataItem(e.sender.id);
+
+        console.log("Value:", value);
+        console.log("Text:", item?.Text || item?.text);
+        console.log("Code:", item?.Code || item?.code);
+        console.log("Description:", item?.Description || item?.description);
+    }
+
+    function onDropdownOpen(e) {
+
+        console.log("Opened:", e.sender.id, "value:", e.sender.value);
+    }
+
+    function onDropdownClose(e) {
+
+        console.log("Closed:", e.sender.id, "value:", e.sender.value);
+    }
+
+    function getDropdownListSelectedData(){
+            const item = Tech.DropDownList.dataItem("CategoryId");
+
+             console.log("Code:", item?.Code || item?.code);
+             console.log("Description:", item?.Description || item?.description);
+    }
+    
+</script>

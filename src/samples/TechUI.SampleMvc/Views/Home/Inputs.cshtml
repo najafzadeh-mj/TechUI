@@ -1,0 +1,77 @@
+@model TechUI.SampleMvc.Models.InputSampleModel
+
+@{
+    ViewData["Title"] = "Inputs";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.InputSampleModel;
+}
+
+<h1>ورودی‌ها</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>نام:</strong> @submitted.FullName</div>
+        <div><strong>مبلغ خام:</strong> @submitted.Price</div>
+        <div><strong>موبایل خام:</strong> @submitted.Phone</div>
+        <div><strong>توضیحات:</strong> @submitted.Description</div>
+    </div>
+}
+
+<form asp-action="Inputs" method="post" class="row g-3">
+
+    <div class="col-md-6">
+        <label class="form-label" for="FullName">نام و نام خانوادگی</label>
+        @(Html.Tech().TextBoxFor<InputSampleModel, string?>(m => m.FullName)
+            .Placeholder("نام و نام خانوادگی")
+            .PrefixIcon("person")
+            .Clearable()
+            .MaxLength(80)
+            .ShowCounter())
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Email">ایمیل</label>
+        @(Html.Tech().TextBox("Email")
+            .Type("email")
+            .Placeholder("name@example.com")
+            .PrefixIcon("envelope")
+            .InputMode("email"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Price">مبلغ (ریال)</label>
+        @(Html.Tech().NumericTextBoxFor<InputSampleModel, decimal?>(m => m.Price)
+            .Placeholder("مبلغ")
+            .Culture("fa-IR")
+            .Decimals(0)
+            .Min(0)
+            .Max(1000000000)
+            .Step(1000)
+            .SuffixIcon("cash"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Phone">موبایل</label>
+        @(Html.Tech().MaskedTextBoxFor<InputSampleModel, string?>(m => m.Phone)
+            .Mask("0000-000-0000")
+            .Placeholder("09xx-xxx-xxxx")
+            .PrefixIcon("phone"))
+    </div>
+
+    <div class="col-12">
+        <label class="form-label" for="Description">توضیحات</label>
+        @(Html.Tech().TextAreaFor<InputSampleModel, string?>(m => m.Description)
+            .Placeholder("توضیحات را وارد کنید...")
+            .Rows(3)
+            .AutoGrow()
+            .MaxLength(400)
+            .ShowCounter())
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="Inputs" class="btn btn-outline-secondary">پاک کردن</a>
+    </div>
+
+</form>

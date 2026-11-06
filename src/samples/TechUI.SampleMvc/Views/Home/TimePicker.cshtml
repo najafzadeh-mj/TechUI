@@ -1,0 +1,42 @@
+@model TechUI.SampleMvc.Models.TimeSampleModel
+
+@{
+    ViewData["Title"] = "TimePicker";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.TimeSampleModel;
+}
+
+<h1>انتخاب ساعت</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>ساعت شروع:</strong> @submitted.StartTime</div>
+        <div><strong>ساعت پایان:</strong> @submitted.EndTime</div>
+    </div>
+}
+
+<form asp-action="TimePicker" method="post" class="row g-3" style="max-width: 420px;">
+
+    <div class="col-md-6">
+        <label class="form-label" for="StartTime">ساعت شروع</label>
+        @(Html.Tech().TimePickerFor<TimeSampleModel, TimeSpan?>(m => m.StartTime)
+            .Step(5)
+            .ClearButton())
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="EndTime">ساعت پایان (۱۲ ساعته)</label>
+        @(Html.Tech().TimePickerFor<TimeSampleModel, TimeSpan?>(m => m.EndTime)
+            .Step(15)
+            .Use12Hour()
+            .Min(new TimeSpan(8, 0, 0))
+            .Max(new TimeSpan(18, 30, 0)))
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="TimePicker" class="btn btn-outline-secondary">بازنشانی</a>
+    </div>
+
+</form>

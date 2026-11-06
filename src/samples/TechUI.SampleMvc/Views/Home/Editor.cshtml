@@ -1,0 +1,40 @@
+@model TechUI.SampleMvc.Models.EditorSampleModel
+
+@{
+    ViewData["Title"] = "Editor";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.EditorSampleModel;
+}
+
+<h1>ادیتور چندخطی</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div class="mb-2"><strong>HTML دریافتی:</strong></div>
+        <pre class="mb-0" dir="ltr" style="white-space: pre-wrap;">@submitted.Content</pre>
+    </div>
+}
+
+<form asp-action="Editor" method="post">
+
+    <div class="mb-3">
+        <label class="form-label" for="Content">محتوا</label>
+        @(Html.Tech().EditorFor<EditorSampleModel, string?>(m => m.Content)
+            .Placeholder("متن خود را وارد کنید...")
+            .Height(260)
+            .MaxLength(2000)
+            .ShowCounter()
+            .Upload(Url.Action("Upload", "Home")!)
+            .MediaLibrary(Url.Action("MediaLibrary", "Home")!)
+            .MaxUploadSize(10 * 1024 * 1024))
+        <div class="form-text">
+            با دکمه‌های تصویر و پیوست می‌توانید فایل را آپلود یا از
+            فروشگاه فایل‌ها انتخاب کنید. حداکثر حجم هر فایل ۱۰ مگابایت است.
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">ثبت</button>
+    <a asp-action="Editor" class="btn btn-outline-secondary">پاک کردن</a>
+
+</form>

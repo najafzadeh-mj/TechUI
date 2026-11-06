@@ -1,0 +1,74 @@
+@model TechUI.SampleMvc.Models.DateRangeSampleModel
+
+@{
+    ViewData["Title"] = "DateRange";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.DateRangeSampleModel;
+}
+
+<h1>انتخاب بازه تاریخ (جلالی)</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>شروع (میلادی):</strong> @submitted.FromDate</div>
+        <div><strong>پایان (میلادی):</strong> @submitted.ToDate</div>
+        <div><strong>شروع (نمایش):</strong> @submitted.FromDate?.ToString("yyyy/MM/dd")</div>
+        <div><strong>پایان (نمایش):</strong> @submitted.ToDate?.ToString("yyyy/MM/dd")</div>
+    </div>
+}
+
+<p class="text-muted">
+    ابتدا روز شروع و سپس روز پایان را انتخاب کنید. با نگه‌داشتن ماوس روی روزها،
+    بازه به‌صورت پیش‌نمایش نمایش داده می‌شود. دو ماه پشت سر هم در یک پنل دیده می‌شوند.
+</p>
+
+<form asp-action="DateRange" method="post" class="row g-3" style="max-width: 640px;">
+
+    <div class="col-12">
+        <label class="form-label">بازه گزارش</label>
+        @(Html.Tech().DateRangeFor<DateRangeSampleModel, DateTime?, DateTime?>(
+                m => m.FromDate,
+                m => m.ToDate)
+            .Placeholders("تاریخ شروع", "تاریخ پایان")
+            .Min(new DateTime(1900, 1, 1))
+            .Max(DateTime.Today.AddYears(1))
+            .Format("yyyy/MM/dd"))
+    </div>
+
+    <div class="col-12">
+        <label class="form-label">بازه بدون مدل (نام‌های دلخواه)</label>
+        @(Html.Tech().DateRange("ReportFrom", "ReportTo")
+            .Placeholders("از تاریخ", "تا تاریخ")
+            .TodayButton(false)
+            .Format("yyyy/MM/dd"))
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="DateRange" class="btn btn-outline-secondary">پاک کردن</a>
+        <button type="button" class="btn btn-outline-primary" id="rangeApiButton">
+            مقدار از API
+        </button>
+    </div>
+
+</form>
+
+<div class="alert alert-light border mt-3" style="max-width: 640px;">
+    <div><strong>API عمومی:</strong></div>
+    <code>Tech.DateRangePicker.value('FromDate')</code>
+    <br />
+    <code>Tech.DateRangePicker.setValue('FromDate', '2026-03-21', '2026-04-20')</code>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('rangeApiButton').addEventListener('click', function () {
+            Tech.DateRangePicker.setValue('FromDate', '2026-03-21', '2026-04-20');
+
+            const value = Tech.DateRangePicker.value('FromDate');
+
+            console.log('DateRange value:', value);
+        });
+    </script>
+}

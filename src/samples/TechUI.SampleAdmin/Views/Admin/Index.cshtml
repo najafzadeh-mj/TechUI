@@ -1,0 +1,221 @@
+@model DashboardViewModel
+@using System.Globalization
+@using TechUI.Mvc.Chart
+@inject SettingsService AppSettings
+@{
+    var fa = CultureInfo.GetCultureInfo("fa-IR");
+    var calendar = new PersianCalendar();
+    var currency = AppSettings.Load().Currency;
+
+    string Number(decimal value) => value.ToString("N0", fa);
+    string Money(decimal value) => Number(value) + " " + currency;
+    string Millions(decimal value) =>
+        (value / 1_000_000m).ToString("N1", fa) + " م." + currency;
+    string Date(DateTime value) =>
+        $"{calendar.GetYear(value):0000}/{calendar.GetMonth(value):00}/{calendar.GetDayOfMonth(value):00}";
+}
+
+<div class="stat-grid">
+    <div class="stat-card green">
+        <div>
+            <div class="stat-label">درآمد ۶ ماه اخیر</div>
+            <div class="stat-value">@Millions(Model.Revenue)</div>
+            <div class="stat-hint">
+                میانگین هر سفارش: @Money(Model.AverageOrder)
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-wallet2"></i></span>
+    </div>
+
+    <div class="stat-card blue">
+        <div>
+            <div class="stat-label">سفارش‌های ثبت‌شده</div>
+            <div class="stat-value">@Number(Model.OrdersCount)</div>
+            <div class="stat-hint">
+                فروش امروز: @Money(Model.TodayRevenue)
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-bag-check"></i></span>
+    </div>
+
+    <div class="stat-card violet">
+        <div>
+            <div class="stat-label">مشتریان</div>
+            <div class="stat-value">@Number(Model.CustomersCount)</div>
+            <div class="stat-hint">
+                @Number(Model.ActiveCustomersCount) مشتری فعال
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-people"></i></span>
+    </div>
+
+    <div class="stat-card amber">
+        <div>
+            <div class="stat-label">محصولات</div>
+            <div class="stat-value">@Number(Model.ProductsCount)</div>
+            <div class="stat-hint">
+                @Number(Model.LowStockCount) محصول کم‌موجود
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-box-seam"></i></span>
+    </div>
+</div>
+
+<div class="dashboard-grid">
+    <section class="admin-card">
+        <div class="admin-card-header">
+            <div>
+                <h2>روند فروش</h2>
+                <small>درآمد ماهانه شش ماه گذشته (بدون سفارش‌های لغوشده)</small>
+            </div>
+            <a class="btn btn-sm btn-outline-primary"
+               asp-controller="Admin" asp-action="Reports">
+                گزارش کامل
+            </a>
+        </div>
+        <div class="admin-card-body">
+            @(Html.Tech().Chart("revenueTrend")
+                .Type(ChartTypes.Column)
+                .Height(300)
+                .Categories(Model.Monthly.Select(item => item.Label))
+                .ValueFormat("currency")
+                .Tooltip()
+                .Legend(false)
+                .YAxis(axis => axis.Format("compact"))
+                .Series("درآمد", Model.Monthly.Select(item => (double)item.Amount)))
+        </div>
+    </section>
+
+    <div class="d-flex flex-column gap-3">
+        <section class="admin-card">
+            <div class="admin-card-header">
+                <h2>وضعیت سفارش‌ها</h2>
+                <small>۶ ماه اخیر</small>
+            </div>
+            <div class="admin-card-body">
+                @(Html.Tech().Chart("orderStatuses")
+                    .Type(ChartTypes.Donut)
+                    .Height(270)
+                    .Categories(Model.Statuses.Select(item => item.Label))
+                    .Donut(0.62,
+                        Number(Model.Statuses.Sum(item => item.Count)))
+                    .DataLabels()
+                    .Tooltip()
+                    .Legend(position: "bottom")
+                    .Series("سفارش‌ها",
+                        Model.Statuses.Select(item => (double)item.Count)))
+            </div>
+        </section>
+
+        <section class="admin-card">
+            <div class="admin-card-header">
+                <h2>فروش بر اساس شهر</h2>
+                <small>۵ شهر برتر</small>
+            </div>
+            <div class="admin-card-body">
+                @(Html.Tech().Chart("topCities")
+                    .Type(ChartTypes.Bar)
+                    .Height(240)
+                    .Categories(Model.TopCities.Select(item => item.City))
+                    .ValueFormat("currency")
+                    .Tooltip()
+                    .Legend(false)
+                    .XAxis(axis => axis.Format("compact"))
+                    .YAxis(axis => axis.Grid(false))
+                    .Series("درآمد",
+                        Model.TopCities.Select(item => (double)item.Revenue)))
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-xl-8">
+        <section class="admin-card h-100">
+            <div class="admin-card-header">
+                <h2>آخرین سفارش‌ها</h2>
+                <a class="btn btn-sm btn-outline-secondary"
+                   asp-controller="Admin" asp-action="Orders">
+                    همه سفارش‌ها
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover admin-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>شماره</th>
+                            <th>مشتری</th>
+                            <th>تاریخ</th>
+                            <th>وضعیت</th>
+                            <th>مبلغ</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in Model.RecentOrders)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@order.Number</td>
+                                <td>@order.Customer?.FullName</td>
+                                <td>@Date(order.OrderDate)</td>
+                                <td>
+                                    <span class="badge @order.Status.ToBadgeClass()">
+                                        @order.Status.ToPersian()
+                                    </span>
+                                </td>
+                                <td>@Money(order.Total)</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary"
+                                       asp-controller="Admin"
+                                       asp-action="OrderDetails"
+                                       asp-route-id="@order.Id">
+                                        جزئیات
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-4">
+        <section class="admin-card h-100">
+            <div class="admin-card-header">
+                <h2>هشدار موجودی</h2>
+                <span class="badge text-bg-warning">@Number(Model.LowStockCount)</span>
+            </div>
+            <div class="admin-card-body">
+                @if (Model.LowStockProducts.Count == 0)
+                {
+                    <div class="empty-state py-3">
+                        <i class="bi bi-check2-circle"></i>
+                        موجودی همه محصولات مناسب است.
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-3">
+                        @foreach (var product in Model.LowStockProducts)
+                        {
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <div class="fw-semibold">@product.Name</div>
+                                    <small class="text-muted">@product.Category?.Name</small>
+                                </div>
+                                <span class="badge @(product.Stock == 0 ? "text-bg-danger" : "text-bg-warning")">
+                                    @Number(product.Stock) عدد
+                                </span>
+                            </div>
+                        }
+                    </div>
+                    <a class="btn btn-sm btn-outline-primary w-100 mt-3"
+                       asp-controller="Admin" asp-action="Products">
+                        مدیریت محصولات
+                    </a>
+                }
+            </div>
+        </section>
+    </div>
+</div>

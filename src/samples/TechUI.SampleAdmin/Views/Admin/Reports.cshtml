@@ -1,0 +1,188 @@
+@model ReportsViewModel
+@using System.Globalization
+@inject SettingsService AppSettings
+@{
+    ViewData["Title"] = "گزارش فروش";
+
+    var fa = CultureInfo.GetCultureInfo("fa-IR");
+    var calendar = new PersianCalendar();
+    var appSettings = AppSettings.Load();
+    var currency = appSettings.Currency;
+    var pageSizes = new[] { 10, appSettings.DefaultPageSize, 25, 50 }
+        .Distinct()
+        .OrderBy(size => size)
+        .ToArray();
+
+    string Number(decimal value) => value.ToString("N0", fa);
+    string Money(decimal value) => Number(value) + " " + currency;
+    string Date(DateTime value) =>
+        $"{calendar.GetYear(value):0000}/{calendar.GetMonth(value):00}/{calendar.GetDayOfMonth(value):00}";
+}
+
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">گزارش بازه‌ای فروش</h2>
+        <p class="text-muted small mb-0">
+            بازه @Date(Model.FromDate) تا @Date(Model.ToDate) — خلاصه، ترکیب وضعیت و ریز سفارش‌ها.
+        </p>
+    </div>
+
+    <form method="get" asp-controller="Admin" asp-action="Reports"
+          class="report-filter-form">
+        <div class="report-date-range">
+            @(Html.Tech().DateRange("from", "to")
+                .Attribute("id", "reportRange")
+                .Start(Model.FromDate.ToString("yyyy-MM-dd"))
+                .End(Model.ToDate.ToString("yyyy-MM-dd"))
+                .Placeholders("از تاریخ", "تا تاریخ"))
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-funnel"></i>
+            اعمال بازه
+        </button>
+        <button type="button" class="btn btn-outline-secondary"
+                onclick="window.print()">
+            <i class="bi bi-printer"></i>
+            چاپ
+        </button>
+    </form>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-card green">
+        <div>
+            <div class="stat-label">درآمد بازه</div>
+            <div class="stat-value">@Money(Model.TotalRevenue)</div>
+            <div class="stat-hint">
+                میانگین هر سفارش: @Money(Model.AverageOrder)
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-cash-stack"></i></span>
+    </div>
+
+    <div class="stat-card blue">
+        <div>
+            <div class="stat-label">تعداد سفارش</div>
+            <div class="stat-value">@Number(Model.TotalOrders)</div>
+            <div class="stat-hint">در بازه انتخاب‌شده</div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-bag-check"></i></span>
+    </div>
+
+    <div class="stat-card violet">
+        <div>
+            <div class="stat-label">تحویل‌شده</div>
+            <div class="stat-value">@Number(Model.DeliveredCount)</div>
+            <div class="stat-hint">سفارش‌های تکمیل‌شده</div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-check2-circle"></i></span>
+    </div>
+
+    <div class="stat-card amber">
+        <div>
+            <div class="stat-label">لغو‌شده</div>
+            <div class="stat-value">@Number(Model.CanceledCount)</div>
+            <div class="stat-hint">نیازمند بررسی</div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-x-circle"></i></span>
+    </div>
+</div>
+
+<section class="admin-card mt-3">
+    <div class="admin-card-header">
+        <div>
+            <h2>ترکیب وضعیت سفارش‌ها</h2>
+            <small>سهم هر وضعیت از سفارش‌های بازه</small>
+        </div>
+    </div>
+    <div class="admin-card-body status-list">
+        @foreach (var status in Model.Statuses)
+        {
+            var tone = status.BadgeClass.Split(' ')[0];
+
+            <div>
+                <div class="status-row">
+                    <span>@status.Label</span>
+                    <span class="text-muted">@Number(status.Count)</span>
+                    <strong>@status.Percent٪</strong>
+                </div>
+                <div class="progress mt-1">
+                    <div class="progress-bar @tone"
+                         role="progressbar"
+                         style="width:@(status.Percent)%;"
+                         aria-valuenow="@status.Percent"
+                         aria-valuemin="0"
+                         aria-valuemax="100"></div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+<div class="mt-3">
+    @(Html.Tech().Grid<Order>()
+        .Name("reportGrid")
+        .DataSource(ds => ds
+            .Read("ReportGrid", "Admin")
+            .Type(TechHttpMethod.Post)
+            .Data("reportRange"))
+        .Pageable()
+        .Sortable()
+        .Filterable()
+        .Resizable()
+        .PageSize(appSettings.DefaultPageSize)
+        .PageSizes(pageSizes)
+        .Toolbar(t =>
+        {
+            t.Refresh("بازخوانی");
+            t.ColumnChooser();
+        })
+        .Columns(c =>
+        {
+            c.Bound(x => x.Number)
+                .Title("شماره سفارش")
+                .Width(130);
+
+            c.Bound(x => x.Customer!.FullName)
+                .Title("مشتری")
+                .Width(200);
+
+            c.Template("{{= formatDate(OrderDate) }}")
+                .Title("تاریخ")
+                .Width(120);
+
+            c.Template(
+                "<span class='badge {{= orderStatusClass(Status) }}'>" +
+                "{{= orderStatus(Status) }}</span>")
+                .Title("وضعیت")
+                .Width(140);
+
+            c.Template("{{= currency(Total) }}")
+                .Title("مبلغ کل")
+                .Width(170);
+
+            c.Template(
+                "<a class='btn btn-sm btn-outline-secondary' " +
+                "href='/Admin/OrderDetails/{{Id}}'>جزئیات</a>")
+                .Title("")
+                .Width(90);
+        }))
+</div>
+
+@section Scripts {
+    <script>
+        function reportRange() {
+
+            const from = document.querySelector(
+                'input[type="hidden"][name="from"]');
+
+            const to = document.querySelector(
+                'input[type="hidden"][name="to"]');
+
+            return {
+                from: from ? from.value : '',
+                to: to ? to.value : ''
+            };
+        }
+    </script>
+}

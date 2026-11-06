@@ -1,0 +1,67 @@
+@using Microsoft.AspNetCore.Html
+@{
+    ViewData["Title"] = "Timeline";
+}
+
+<h1>تایملاین / تاریخچهٔ رویدادها</h1>
+<p class="text-muted">
+    فهرست عمودی رویدادها با مارکر آیکن‌دار، رنگ‌بندی وضعیت (tone)، برچسب، زمان
+    و توضیح. چیدمان با ویژگی‌های منطقی CSS نوشته شده و در RTL، تم تاریک و
+    قالب‌های رنگی درست نمایش داده می‌شود.
+</p>
+
+<div class="row g-4" dir="rtl" lang="fa">
+
+    <div class="col-12 col-xl-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-1">تاریخچهٔ سفارش ۱۰۲۴</h2>
+                <p class="text-muted small mb-3">
+                    جدیدترین رویداد در بالا؛ هر آیتم رنگ و آیکن مخصوص خودش را دارد.
+                </p>
+
+                @(Html.Tech().Timeline("orderTimeline")
+                    .Item("تحویل داده شد", "امروز — ۱۱:۰۲", "سفارش در محل مشتری تحویل و رسید ثبت شد.", "check2-circle", "success", "پایان")
+                    .Item("ارسال شد", "دیروز — ۰۹:۱۵", "مرسوله با کد رهگیری ۲۴۱۹۸۷ به پست تحویل شد.", "truck", "info")
+                    .Item("بسته‌بندی شد", "دیروز — ۰۸:۴۰", "اقلام سفارش در انبار مرکزی بسته‌بندی شدند.", "box-seam", "primary")
+                    .Item("پرداخت تأیید شد", "۱۴۰۵/۰۸/۱۴ — ۱۶:۲۰", "تراکنش با موفقیت تأیید شد.", "credit-card", "success")
+                    .Item("سفارش ثبت شد", "۱۴۰۵/۰۸/۱۴ — ۱۶:۰۵", "سفارش توسط سارا احمدی ثبت شد.", "receipt", "neutral", "شروع"))
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-1">فعالیت اخیر تیم</h2>
+                <p class="text-muted small mb-3">
+                    حالت فشرده (<code>Compact</code>) و بدنهٔ HTML سفارشی.
+                </p>
+
+                @(Html.Tech().Timeline("teamTimeline")
+                    .Compact()
+                    .Item("محصول ویرایش شد", "۲۵ دقیقه پیش", "«هدفون بی‌سیم پرو» به‌روزرسانی شد.", "pencil-square", "primary")
+                    .Item("گزارش فروش آماده شد", "۱ ساعت پیش", new HtmlString("گزارش مهرماه آماده است؛ <a href=\"#reports\">مشاهدهٔ گزارش</a>."), "file-earmark-bar-chart", "info")
+                    .Item("موجودی کم شد", "۳ ساعت پیش", "موجودی «کیبورد مکانیکال» به ۵ عدد رسید.", "exclamation-triangle", "warning", "هشدار")
+                    .Item("مشتری جدید افزوده شد", "دیروز", "پروفایل «آرمان کاظمی» ایجاد شد.", "person-plus", "success"))
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 mb-1">بدون آیکن</h2>
+                <p class="text-muted small mb-3">
+                    اگر آیکن داده نشود، مارکر به نقطهٔ رنگی تبدیل می‌شود.
+                </p>
+
+                @(Html.Tech().Timeline("simpleTimeline")
+                    .Item("نسخهٔ ۱.۰ منتشر شد", "۱۴۰۵/۰۷/۰۱", "اولین نسخهٔ عمومی TechUI.Mvc.")
+                    .Item("پشتیبانی از RTL", "۱۴۰۵/۰۷/۱۲", "همهٔ کامپوننت‌ها با ویژگی‌های منطقی بازنویسی شدند.", null, "info")
+                    .Item("تم تاریک و قالب‌های رنگی", "۱۴۰۵/۰۸/۰۲", "شش قالب رنگ روی توکن‌های مشترک.", null, "primary"))
+            </div>
+        </div>
+    </div>
+
+</div>

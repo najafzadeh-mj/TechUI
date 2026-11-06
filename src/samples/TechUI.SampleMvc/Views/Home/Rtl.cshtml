@@ -1,0 +1,147 @@
+@using TechUI.Mvc.DropDownList
+@using TechUI.SampleMvc.Models
+
+@{
+    ViewData["Title"] = "RTL";
+}
+
+<h1>کلاس tech-rtl</h1>
+
+<p class="text-muted">
+    این صفحه به‌صورت پیش‌فرض LTR است. هر کامپوننتی که داخل عنصری با کلاس
+    <code>tech-rtl</code> قرار بگیرد راست‌به‌چپ می‌شود (div، p، section، form و ...).
+</p>
+
+<div class="row g-4">
+
+    <div class="col-lg-5">
+        <h5>بدون کلاس (LTR)</h5>
+
+        <label class="form-label" for="ltrText">متن ساده</label>
+        <input id="ltrText" class="form-control" value="Sample text" />
+
+        <label class="form-label mt-3" for="plainTechText">TextBox خارج از tech-rtl</label>
+        @(Html.Tech().TextBox("plainTechText")
+            .Placeholder("Plain text")
+            .PrefixIcon("pencil"))
+    </div>
+
+    <div class="col-lg-7">
+        <div class="tech-rtl border rounded p-3">
+
+            <h5>داخل tech-rtl</h5>
+
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlName">نام کامل</label>
+                    @(Html.Tech().TextBox("rtlName")
+                        .Placeholder("نام کامل")
+                        .PrefixIcon("person")
+                        .Clearable()
+                        .MaxLength(40)
+                        .ShowCounter())
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlAmount">مبلغ</label>
+                    @(Html.Tech().NumericTextBox("rtlAmount")
+                        .Value(12500)
+                        .Culture("fa-IR")
+                        .Decimals(0)
+                        .Min(0)
+                        .Max(1000000000)
+                        .Step(1000)
+                        .SuffixIcon("cash"))
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlPhone">موبایل</label>
+                    @(Html.Tech().MaskedTextBox("rtlPhone")
+                        .Mask("0000-000-0000")
+                        .Placeholder("09xx-xxx-xxxx")
+                        .PrefixIcon("phone"))
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlCategory">دسته‌بندی</label>
+                    @(Html.Tech().DropDownList("rtlCategory")
+                        .OptionLabel("-- انتخاب کنید --")
+                        .Filterable()
+                        .DataTextField("Text")
+                        .DataValueField("Id")
+                        .Value("2")
+                        .DataSource(ds => ds.Read("GetDropDownList", "Home")))
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlDate">تاریخ</label>
+                    @(Html.Tech().DatePicker("rtlDate")
+                        .Placeholder("تاریخ")
+                        .Min(new DateTime(1900, 1, 1))
+                        .Max(DateTime.Today))
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="rtlTime">ساعت</label>
+                    @(Html.Tech().TimePicker("rtlTime")
+                        .Step(5)
+                        .ClearButton())
+                </div>
+
+                <div class="col-md-6">
+                    @(Html.Tech().CheckBox("rtlNews")
+                        .Label("عضویت در خبرنامه")
+                        .Switch())
+                </div>
+
+                <div class="col-md-6">
+                    @(Html.Tech().RadioButton("rtlGender")
+                        .Items(items => items
+                            .Add("1", "مرد")
+                            .Add("2", "زن"))
+                        .Inline())
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">توضیحات</label>
+                    @(Html.Tech().Editor("rtlEditor")
+                        .Placeholder("توضیحات...")
+                        .Height(140)
+                        .Tools("bold", "italic", "underline", "ul", "ol", "link"))
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">جدول (فیلتر و انتخاب ستون)</label>
+                    @Html.AntiForgeryToken()
+
+                    @(Html.Tech().Grid<UserViewModel>()
+                        .Name("rtlGrid")
+                        .DataSource(ds => ds.Read("GridData", "Home")
+                            .Type(TechHttpMethod.Post))
+                        .Pageable()
+                        .Sortable()
+                        .Filterable()
+                        .PageSize(5)
+                        .Height(280)
+                        .Toolbar(t => t.ColumnChooser())
+                        .Columns(c =>
+                        {
+                            c.Bound(x => x.Id)
+                                .Title("شناسه")
+                                .Width(100);
+
+                            c.Bound(x => x.FullName)
+                                .Title("نام کامل");
+
+                            c.Template(
+                                "{{ if (IsActive) { }}<span class='badge bg-success'>فعال</span>{{ } else { }}<span class='badge bg-danger'>غیرفعال</span>{{ } }}")
+                                .Title("وضعیت")
+                                .Width(110);
+                        }))
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>

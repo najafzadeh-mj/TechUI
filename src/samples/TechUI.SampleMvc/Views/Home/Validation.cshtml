@@ -1,0 +1,127 @@
+@model TechUI.SampleMvc.Models.ValidationSampleModel
+
+@{
+    ViewData["Title"] = "Validation";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.ValidationSampleModel;
+}
+
+<h1>اعتبارسنجی فرم</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        فرم با موفقیت و بدون خطا ثبت شد.
+    </div>
+}
+
+<div class="alert alert-info">
+    قوانین از Data Annotations مدل خوانده می‌شوند و هم در سرور و هم در کلاینت بررسی می‌شوند.
+</div>
+
+<form asp-action="Validation" method="post" class="row g-3">
+
+    <div class="col-md-6">
+        <label class="form-label" for="FullName">نام و نام خانوادگی</label>
+        @(Html.Tech().TextBoxFor<ValidationSampleModel, string?>(m => m.FullName)
+            .Placeholder("حداقل ۳ و حداکثر ۴۰ کاراکتر")
+            .PrefixIcon("person"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Email">ایمیل</label>
+        @(Html.Tech().TextBoxFor<ValidationSampleModel, string?>(m => m.Email)
+            .Type("email")
+            .Placeholder("name@example.com")
+            .PrefixIcon("envelope"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Age">سن</label>
+        @(Html.Tech().NumericTextBoxFor<ValidationSampleModel, int>(m => m.Age)
+            .Placeholder("بین ۱۸ تا ۹۹")
+            .Min(1)
+            .Max(120))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Price">مبلغ</label>
+        @(Html.Tech().NumericTextBoxFor<ValidationSampleModel, decimal>(m => m.Price)
+            .Placeholder("بین ۱٬۰۰۰ تا ۵۰٬۰۰۰٬۰۰۰")
+            .Culture("fa-IR")
+            .Decimals(0)
+            .Grouping(true))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Mobile">موبایل</label>
+        @(Html.Tech().MaskedTextBoxFor<ValidationSampleModel, string?>(m => m.Mobile)
+            .Mask("0000000000")
+            .Placeholder("09xxxxxxxxx")
+            .PrefixIcon("phone"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="CategoryId">دسته‌بندی</label>
+        @(Html.Tech().DropDownListFor<ValidationSampleModel, int?>(m => m.CategoryId)
+            .OptionLabel("-- انتخاب کنید --")
+            .Filterable()
+            .ServerFiltering()
+            .MinLength(1)
+            .DataTextField("Text")
+            .DataValueField("Id")
+            .DataSource(ds => ds.Read("GetDropDownList", "Home")))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="BirthDate">تاریخ تولد</label>
+        @(Html.Tech().DatePickerFor<ValidationSampleModel, DateTime?>(m => m.BirthDate)
+            .Max(DateTime.Today))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="StartTime">ساعت شروع</label>
+        @(Html.Tech().TimePickerFor<ValidationSampleModel, TimeSpan?>(m => m.StartTime)
+            .Step(15))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Nickname">نام مستعار</label>
+        @(Html.Tech().TextBoxFor<ValidationSampleModel, string?>(m => m.Nickname)
+            .Placeholder("حداکثر ۲۰ کاراکتر")
+            .MaxLength(20)
+            .ShowCounter())
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Bio">بیوگرافی</label>
+        @(Html.Tech().TextAreaFor<ValidationSampleModel, string?>(m => m.Bio)
+            .Rows(2)
+            .MaxLength(200)
+            .ShowCounter())
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="Password">رمز عبور</label>
+        @(Html.Tech().TextBoxFor<ValidationSampleModel, string?>(m => m.Password)
+            .Type("password")
+            .Placeholder("حداقل ۶ کاراکتر"))
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label" for="ConfirmPassword">تکرار رمز عبور</label>
+        @(Html.Tech().TextBoxFor<ValidationSampleModel, string?>(m => m.ConfirmPassword)
+            .Type("password"))
+    </div>
+
+    <div class="col-12">
+        @(Html.Tech().CheckBoxFor<ValidationSampleModel, bool>(m => m.AcceptTerms)
+            .Label("قوانین را می‌پذیرم"))
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="Validation" class="btn btn-outline-secondary">پاک کردن</a>
+    </div>
+
+</form>

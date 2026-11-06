@@ -1,0 +1,123 @@
+@{
+    ViewData["Title"] = "Notifications";
+}
+
+<h1>اعلان‌ها و دیالوگ</h1>
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Toast</div>
+            <div class="card-body d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-success" onclick="showToast('success')">موفقیت</button>
+                <button type="button" class="btn btn-info" onclick="showToast('info')">اطلاع</button>
+                <button type="button" class="btn btn-warning" onclick="showToast('warning')">هشدار</button>
+                <button type="button" class="btn btn-danger" onclick="showToast('error')">خطا</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="showToast('success', 'bottom-center', 0)">بدون بسته شدن</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Dialog</div>
+            <div class="card-body d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-primary" onclick="askConfirm()">تأیید</button>
+                <button type="button" class="btn btn-outline-primary" onclick="showAlert()">هشدار ساده</button>
+                <button type="button" class="btn btn-outline-danger" onclick="showDelete()">حذف با سه گزینه</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="showFormDialog()">دیالوگ سفارشی</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="alert alert-light border" id="notifyLog">نتیجه اینجا نمایش داده می‌شود.</div>
+    </div>
+
+</div>
+
+<script>
+    function log(text) {
+        document.getElementById('notifyLog').textContent = text;
+    }
+
+    function showToast(type, position, duration) {
+        const titles = {
+            success: 'انجام شد',
+            info: 'اطلاعیه',
+            warning: 'هشدار',
+            error: 'خطا'
+        };
+
+        const messages = {
+            success: 'عملیات با موفقیت انجام شد.',
+            info: 'این یک پیام اطلاع‌رسانی است.',
+            warning: 'موجودی حساب شما کم است.',
+            error: 'اتصال به سرور برقرار نشد.'
+        };
+
+        Tech.notify(messages[type], {
+            type: type,
+            title: titles[type],
+            position: position || 'top-end',
+            duration: duration === undefined ? 4200 : duration
+        });
+    }
+
+    function askConfirm() {
+        Tech.confirm('آیا از ادامه عملیات مطمئن هستید؟', {
+            confirmText: 'بله، ادامه بده',
+            cancelText: 'خیر'
+        }).then(function (ok) {
+            log(ok ? 'تأیید شد.' : 'لغو شد.');
+        });
+    }
+
+    function showAlert() {
+        Tech.alert('تغییرات شما ذخیره نشده است.', {
+            title: 'توجه',
+            type: 'warning'
+        }).then(function () {
+            log('هشدار بسته شد.');
+        });
+    }
+
+    function showDelete() {
+        Tech.dialog({
+            title: 'حذف رکورد',
+            message: 'رکورد انتخاب‌شده حذف شود؟ این عملیات قابل بازگشت نیست.',
+            type: 'danger',
+            buttons: [
+                { text: 'انصراف', value: 'cancel', variant: 'outline-secondary' },
+                { text: 'بایگانی', value: 'archive', variant: 'outline-warning' },
+                { text: 'حذف', value: 'delete', variant: 'danger' }
+            ]
+        }).then(function (value) {
+            log('گزینه انتخاب‌شده: ' + value);
+        });
+    }
+
+    function showFormDialog() {
+        Tech.dialog({
+            title: 'ارسال پیام',
+            type: 'info',
+            size: 'lg',
+            content: '<div class="mb-2"><label class="form-label">عنوان</label>' +
+                '<input class="form-control" id="dialogTitle" /></div>' +
+                '<div><label class="form-label">توضیحات</label>' +
+                '<textarea class="form-control" id="dialogBody" rows="3"></textarea></div>',
+            buttons: [
+                { text: 'انصراف', value: null, variant: 'outline-secondary' },
+                {
+                    text: 'ارسال', value: null, variant: 'primary',
+                    action: function (close) {
+                        const title = document.getElementById('dialogTitle').value;
+                        log('ارسال شد: ' + (title || 'بدون عنوان'));
+                        close(true);
+                    }
+                }
+            ]
+        });
+    }
+</script>

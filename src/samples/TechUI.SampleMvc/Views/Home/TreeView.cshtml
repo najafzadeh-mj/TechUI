@@ -1,0 +1,142 @@
+@{
+    ViewData["Title"] = "TreeView";
+}
+
+<h1>TreeView</h1>
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+
+        <h2 class="h6">انتخاب تکی + آیکون + تمپلیت کلاینت</h2>
+
+        <p class="text-muted small">
+            برچسب هر نود با <code>ClientTemplate</code> (سینتکس Kendo) ساخته
+            می‌شود: <code>#: field #</code> خروجی encode‌شده و
+            <code>#= field #</code> خروجی خام HTML.
+        </p>
+
+        @(Html.Tech().TreeView("demoTree")
+            .Items(items => items
+                .Add("digital", "کالای دیجیتال", node => node
+                    .Icon("phone")
+                    .Expanded()
+                    .Data("count", 3)
+                    .Children(children => children
+                        .Add("mobile", "موبایل", child => child
+                            .Icon("phone")
+                            .Data("count", 2))
+                        .Add("laptop", "لپ‌تاپ", child => child
+                            .Icon("laptop")
+                            .Data("count", 5))
+                        .Add("tablet", "تبلت", child => child
+                            .Icon("tablet")
+                            .Disabled()
+                            .Data("count", 0))))
+                .Add("clothing", "پوشاک", node => node
+                    .Icon("bag")
+                    .Data("count", 12)
+                    .Children(children => children
+                        .Add("men", "مردانه", child => child
+                            .Data("count", 7))
+                        .Add("women", "زنانه", child => child
+                            .Data("count", 5))))
+                .Add("books", "کتاب", node => node
+                    .Icon("book")
+                    .Disabled()
+                    .Data("count", 18)))
+            .ClientTemplate("<span class=\"fw-semibold\">#: text #</span> <span class=\"badge text-bg-secondary\">#: count #</span>")
+            .Select("onTreeSelect"))
+
+        <div class="mt-3 d-flex align-items-center gap-2">
+            <button type="button" id="treeExpandAll"
+                    class="btn btn-sm btn-outline-secondary">
+                باز کردن همه
+            </button>
+            <button type="button" id="treeCollapseAll"
+                    class="btn btn-sm btn-outline-secondary">
+                بستن همه
+            </button>
+            <span class="small text-muted">
+                انتخاب‌شده: <strong id="treeSelection">—</strong>
+            </span>
+        </div>
+
+    </div>
+
+    <div class="col-lg-6">
+
+        <h2 class="h6">چک‌باکس آبشاری + انتخاب چندتایی</h2>
+
+        <p class="text-muted small">
+            والد به‌صورت خودکار نامعین (<code>indeterminate</code>) می‌شود و
+            امکان انتخاب چندتایی با Ctrl/Cmd وجود دارد.
+        </p>
+
+        @(Html.Tech().TreeView("checkTree")
+            .CheckBoxes()
+            .Selection("multiple")
+            .ExpandAll()
+            .Items(items => items
+                .Add("shipping", "ارسال", node => node
+                    .Icon("truck")
+                    .Children(children => children
+                        .Add("express", "پست پیشتاز")
+                        .Add("normal", "پست عادی")
+                        .Add("pickup", "تحویل حضوری")))
+                .Add("payment", "پرداخت", node => node
+                    .Icon("credit-card")
+                    .Children(children => children
+                        .Add("online", "آنلاین")
+                        .Add("cash", "در محل")))
+                .Add("support", "پشتیبانی", node => node
+                    .Icon("headset")))
+            .ClientHtml("<span>#: text #</span>")
+            .Select("onTreeSelectMulti")
+            .Check("onTreeCheck"))
+
+        <div class="mt-3 small text-muted">
+            انتخاب‌شده‌ها: <strong id="treeMultiSelection">—</strong>
+            <br />
+            تیک‌خورده‌ها: <strong id="treeChecked">—</strong>
+        </div>
+
+    </div>
+
+</div>
+
+@section Scripts {
+
+    <script>
+        function onTreeSelect(ev) {
+
+            document.getElementById('treeSelection').textContent =
+                ev.id || '—';
+        }
+
+        function onTreeCheck(ev) {
+
+            document.getElementById('treeChecked').textContent =
+                ev.checked.length ? ev.checked.join('، ') : '—';
+        }
+
+        function onTreeSelectMulti(ev) {
+
+            document.getElementById('treeMultiSelection').textContent =
+                ev.selectedIds.length
+                    ? ev.selectedIds.join('، ')
+                    : '—';
+        }
+
+        document.getElementById('treeExpandAll')
+            .addEventListener('click', function () {
+                Tech.TreeView.get('demoTree').expandAll();
+            });
+
+        document.getElementById('treeCollapseAll')
+            .addEventListener('click', function () {
+                Tech.TreeView.get('demoTree').collapseAll();
+            });
+    </script>
+
+}

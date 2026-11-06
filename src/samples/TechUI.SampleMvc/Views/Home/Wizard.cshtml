@@ -1,0 +1,158 @@
+@model TechUI.SampleMvc.Models.WizardSampleModel
+
+@{
+    ViewData["Title"] = "Wizard";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.WizardSampleModel;
+
+    var customerStep = await Html.PartialAsync("_WizardCustomer", Model);
+    var companyStep = await Html.PartialAsync("_WizardCompany", Model);
+
+    var confirmStep = @"
+        <div class=""alert alert-info mb-3"">
+            با زدن «پایان» اطلاعات به سرور ارسال می‌شود. ویزارد پیش از ارسال،
+            مرحلهٔ جاری را با <code>Tech.validate</code> بررسی می‌کند.
+        </div>
+        <ul class=""mb-0"">
+            <li>مراحل قبلی هنگام عبور اعتبارسنجی شده‌اند.</li>
+            <li>دکمهٔ پایان رویدادهای <code>Complete</code> و <code>Finish</code> را اجرا می‌کند.</li>
+            <li>دکمه‌های مرحله در حالت خطی فقط تا مرحلهٔ جاری فعال هستند.</li>
+        </ul>";
+}
+
+<h1>ویزارد / استپر</h1>
+<p class="text-muted">
+    ناوبری مرحله‌به‌مرحله با اعتبارسنجی هر مرحله، نوار پیشرفت، حالت خطی یا آزاد،
+    چیدمان افقی یا عمودی و کنترل کامل از طریق API جاوااسکریپت.
+</p>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>نام:</strong> @submitted.FullName</div>
+        <div><strong>ایمیل:</strong> @submitted.Email</div>
+        <div><strong>شرکت:</strong> @submitted.Company</div>
+        <div>
+            <strong>نوع حساب:</strong>
+            @(submitted.Plan switch
+            {
+                "basic" => "پایه",
+                "pro" => "حرفه‌ای",
+                "enterprise" => "سازمانی",
+                _ => submitted.Plan
+            })
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(submitted.Notes))
+        {
+            <div><strong>توضیحات:</strong> @submitted.Notes</div>
+        }
+    </div>
+}
+
+<div class="row g-4" dir="rtl" lang="fa">
+
+    <div class="col-12 col-xl-7">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 mb-1">ثبت‌نام سه‌مرحله‌ای (خطی + اعتبارسنجی)</h2>
+                <p class="text-muted small mb-3">
+                    تا زمانی که فیلدهای الزامی مرحلهٔ جاری کامل نشوند، «بعدی» کار نمی‌کند.
+                </p>
+
+                <form asp-action="Wizard" method="post">
+                    <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+                    @(Html.Tech().Wizard("checkoutWizard")
+                        .Step("اطلاعات مشتری", customerStep, "نام و ایمیل", "person")
+                        .Step("اطلاعات شرکت", companyStep, "شرکت و نوع حساب", "building")
+                        .Step("مرور و تأیید", confirmStep, "بررسی نهایی", "check2-circle")
+                        .PrevText("قبلی")
+                        .NextText("بعدی")
+                        .FinishText("ثبت نهایی")
+                        .SubmitOnFinish()
+                        .Events(e => e
+                            .Change("onCheckoutChange")
+                            .Complete("onCheckoutComplete")
+                            .Finish("onCheckoutFinish")))
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-body d-flex flex-column">
+                <h2 class="h5 mb-1">حالت عمودی و ناوبری آزاد</h2>
+                <p class="text-muted small mb-3">
+                    بدون اعتبارسنجی و بدون محدودیت ترتیب؛ از دکمه‌ها یا API استفاده کنید.
+                </p>
+
+                @(Html.Tech().Wizard("freeWizard")
+                    .Vertical()
+                    .Linear(false)
+                    .Progress(false)
+                    .Step("انتخاب نوع", "<p class=\"mb-0\">حالت ویزارد، خطی یا آزاد، با <code>Linear</code> کنترل می‌شود.</p>", null, "sliders")
+                    .Step("تنظیمات", "<p class=\"mb-0\">چیدمان عمودی با <code>Vertical</code> فعال می‌شود و مناسب ستون‌های باریک است.</p>", null, "gear")
+                    .Step("تأیید", "<p class=\"mb-0\">در حالت آزاد می‌توانید از هر مرحله به هر مرحله بروید.</p>", null, "check2")
+                    .FinishText("پایان")
+                    .Events(e => e
+                        .Change("onFreeChange")
+                        .Finish("onFreeFinish")))
+
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="wizardApi('prev')">قبلی</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="wizardApi('next')">بعدی</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="wizardApi('last')">پرش به آخر</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="wizardApi('reset')">بازنشانی</button>
+                </div>
+
+                <pre id="wizardLog" class="small bg-body-tertiary border rounded p-2 mt-3 mb-0 flex-grow-1"
+                     style="min-height: 7rem; white-space: pre-wrap;"></pre>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function wizardAppend(message) {
+        const log = document.getElementById('wizardLog');
+
+        log.textContent = message + '\n' + log.textContent;
+    }
+
+    function onCheckoutChange(e) {
+        wizardAppend('checkout Change → مرحله ' + (e.index + 1) + ' از ' + e.state.total);
+    }
+
+    function onCheckoutComplete(e) {
+        wizardAppend('checkout Complete → تکمیل‌شده: ' + e.completed.filter(Boolean).length);
+    }
+
+    function onCheckoutFinish() {
+        wizardAppend('checkout Finish → ارسال فرم');
+    }
+
+    function onFreeChange(e) {
+        wizardAppend('free Change → ' + e.state.steps[e.index].title);
+    }
+
+    function onFreeFinish() {
+        wizardAppend('free Finish');
+    }
+
+    function wizardApi(action) {
+        const wizard = Tech.Wizard.get('freeWizard');
+
+        if (!wizard) return;
+
+        if (action === 'next') wizard.next();
+        else if (action === 'prev') wizard.prev();
+        else if (action === 'last') wizard.goTo(2);
+        else if (action === 'reset') wizard.reset();
+
+        wizardAppend('state → completed: [' +
+            wizard.state().completed.join(', ') + ']');
+    }
+</script>

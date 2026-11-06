@@ -1,0 +1,55 @@
+@model TechUI.SampleMvc.Models.ChoiceSampleModel
+
+@{
+    ViewData["Title"] = "CheckBox & Radio";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.ChoiceSampleModel;
+}
+
+<h1>چک‌باکس و رادیو باتن</h1>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success">
+        <div><strong>فعال:</strong> @submitted.IsActive</div>
+        <div><strong>خبرنامه:</strong> @submitted.NewsLetter</div>
+        <div><strong>جنسیت:</strong> @submitted.Gender</div>
+    </div>
+}
+
+<form asp-action="Choice" method="post" class="row g-3" style="max-width: 420px;">
+
+    <div class="col-12">
+        @(Html.Tech().CheckBoxFor<ChoiceSampleModel, bool>(m => m.IsActive)
+            .Label("فعال"))
+    </div>
+
+    <div class="col-12">
+        @(Html.Tech().CheckBoxFor<ChoiceSampleModel, bool>(m => m.NewsLetter)
+            .Label("عضویت در خبرنامه")
+            .Switch())
+    </div>
+
+    <div class="col-12">
+        @(Html.Tech().CheckBox("Locked")
+            .Label("قفل‌شده (فقط خواندنی)")
+            .ReadOnly()
+            .Value(true))
+    </div>
+
+    <div class="col-12">
+        <span class="form-label d-block">جنسیت</span>
+        @(Html.Tech().RadioButtonFor<ChoiceSampleModel, string?>(m => m.Gender)
+            .Items(items => items
+                .Add("1", "مرد")
+                .Add("2", "زن")
+                .Add("3", "سایر"))
+            .Inline())
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="Choice" class="btn btn-outline-secondary">بازنشانی</a>
+    </div>
+
+</form>

@@ -1,0 +1,113 @@
+@model OrderFormModel
+@{
+    var isEdit = Model.Id > 0;
+    var orderNumber = Model.Number ?? ViewBag.OrderNumber as string ?? "—";
+    ViewData["Title"] = isEdit ? "ویرایش سفارش" : "سفارش جدید";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">@ViewData["Title"]</h2>
+        <p class="text-muted small mb-0">
+            مشتری را از فهرست سرور انتخاب کنید؛ مبلغ و وضعیت سفارش را مشخص کنید.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Orders">
+        <i class="bi bi-arrow-right"></i>
+        بازگشت به فهرست
+    </a>
+</div>
+
+<form asp-controller="Admin"
+      asp-action="@(isEdit ? "OrderEdit" : "OrderCreate")"
+      method="post"
+      class="admin-card form-card p-4"
+      novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            لطفاً خطاهای مشخص‌شده را برطرف کنید.
+        </div>
+    }
+
+    <div class="order-number-banner">
+        <span class="text-muted small">شماره سفارش</span>
+        <strong dir="ltr">@orderNumber</strong>
+        <span class="badge bg-secondary-subtle text-secondary-emphasis">
+            @(isEdit ? "ثبت‌شده" : "خودکار")
+        </span>
+    </div>
+
+    <div class="form-grid">
+        <div class="span-2">
+            <label class="form-label" for="CustomerId">مشتری</label>
+            @(Html.Tech().DropDownListFor<OrderFormModel, int?>(m => m.CustomerId)
+                .DataSource(ds => ds
+                    .Read("CustomerLookup", "Admin")
+                    .Type(TechHttpMethod.Get))
+                .DataTextField("text")
+                .DataValueField("value")
+                .OptionLabel("جستجو و انتخاب مشتری...")
+                .Filterable()
+                .ServerFiltering()
+                .MinLength(1))
+            <div class="form-hint">
+                فقط مشتریان فعال در نتایج جستجو نمایش داده می‌شوند.
+            </div>
+        </div>
+
+        <div>
+            <label class="form-label" for="OrderDate">تاریخ سفارش</label>
+            @(Html.Tech().DatePickerFor<OrderFormModel, DateTime>(m => m.OrderDate)
+                .Max(DateTime.Today)
+                .TodayButton())
+        </div>
+
+        <div>
+            <label class="form-label" for="Total">مبلغ کل (ریال)</label>
+            @(Html.Tech().NumericTextBoxFor<OrderFormModel, decimal>(m => m.Total)
+                .Min(10_000)
+                .Max(5_000_000_000)
+                .Step(10_000)
+                .Decimals(0)
+                .Culture("fa-IR")
+                .SuffixIcon("cash-coin"))
+        </div>
+
+        <div class="span-2">
+            <label class="form-label">وضعیت سفارش</label>
+            @(Html.Tech().RadioButtonFor<OrderFormModel, OrderStatus>(m => m.Status)
+                .Items(items => items
+                    .Add("Pending", "در انتظار پرداخت")
+                    .Add("Paid", "پرداخت شده")
+                    .Add("Shipped", "ارسال شده")
+                    .Add("Delivered", "تحویل شده")
+                    .Add("Canceled", "لغو شده"))
+                .Inline())
+        </div>
+
+        <div class="span-2">
+            <label class="form-label" for="Note">یادداشت سفارش</label>
+            @(Html.Tech().TextAreaFor<OrderFormModel, string?>(m => m.Note)
+                .Rows(3)
+                .AutoGrow()
+                .MaxLength(1000)
+                .ShowCounter()
+                .Placeholder("توضیح تکمیلی، نحوه ارسال یا یادداشت داخلی..."))
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Orders">
+            انصراف
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2"></i>
+            @(isEdit ? "ذخیره تغییرات" : "ثبت سفارش")
+        </button>
+    </div>
+</form>

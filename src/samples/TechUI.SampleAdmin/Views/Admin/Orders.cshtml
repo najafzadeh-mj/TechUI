@@ -1,0 +1,155 @@
+@inject SettingsService AppSettings
+@{
+    ViewData["Title"] = "سفارش‌ها";
+
+    var defaultPageSize = AppSettings.Load().DefaultPageSize;
+    var pageSizes = new[] { 10, defaultPageSize, 25, 50 }
+        .Distinct()
+        .OrderBy(size => size)
+        .ToArray();
+}
+
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">سفارش‌های فروشگاه</h2>
+        <p class="text-muted small mb-0">
+            ترکیب چند فیلتر، مرتب‌سازی چندستونه و تغییر وضعیت سفارش‌ها.
+        </p>
+    </div>
+
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <select id="orderStatusFilter" class="form-select admin-status-filter"
+                aria-label="فیلتر وضعیت سفارش">
+            <option value="">همه وضعیت‌ها</option>
+            <option value="0">در انتظار پرداخت</option>
+            <option value="1">پرداخت شده</option>
+            <option value="2">ارسال شده</option>
+            <option value="3">تحویل شده</option>
+            <option value="4">لغو شده</option>
+        </select>
+
+        <div class="input-group admin-quick-search">
+            <span class="input-group-text bg-transparent">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="search" id="orderQuickSearch" class="form-control"
+                   placeholder="جستجوی شماره سفارش..." aria-label="جستجوی سفارش" />
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="quickSearchOrders()">
+                جستجو
+            </button>
+        </div>
+    </div>
+</div>
+
+@(Html.Tech().Grid<Order>()
+    .Name("ordersGrid")
+    .DataSource(ds => ds
+        .Read("OrderGrid", "Admin")
+        .Type(TechHttpMethod.Post))
+    .Pageable()
+    .Sortable()
+    .Filterable()
+    .Resizable()
+    .PageSize(defaultPageSize)
+    .PageSizes(pageSizes)
+    .Height(620)
+    .Toolbar(t =>
+    {
+        t.Create("سفارش جدید", "onOrderCreate");
+        t.Refresh("بازخوانی");
+        t.ColumnChooser();
+    })
+    .Columns(c =>
+    {
+        c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(80);
+
+        c.Bound(x => x.Number)
+            .Title("شماره سفارش")
+            .Width(130);
+
+        c.Bound(x => x.Customer!.FullName)
+            .Title("مشتری")
+            .Width(190);
+
+        c.Template("{{= formatDate(OrderDate) }}")
+            .Title("تاریخ")
+            .Width(120);
+
+        c.Template(
+            "<span class='badge {{= orderStatusClass(Status) }}'>" +
+            "{{= orderStatus(Status) }}</span>")
+            .Title("وضعیت")
+            .Width(140);
+
+        c.Template("{{= currency(Total) }}")
+            .Title("مبلغ کل")
+            .Width(160);
+
+        c.Template(
+            "<a class='btn btn-sm btn-outline-secondary me-1' " +
+            "href='/Admin/OrderDetails/{{Id}}' title='جزئیات'>" +
+            "<i class='bi bi-eye'></i></a>" +
+            "<a class='btn btn-sm btn-outline-primary me-1' " +
+            "href='/Admin/OrderEdit/{{Id}}' title='ویرایش'>" +
+            "<i class='bi bi-pencil'></i></a>" +
+            "<button type='button' class='btn btn-sm btn-outline-danger' " +
+            "onclick='deleteOrder({{Id}})' title='حذف'>" +
+            "<i class='bi bi-trash'></i></button>")
+            .Title("عملیات")
+            .Width(160);
+    }))
+
+@section Scripts {
+    <script>
+        function onOrderCreate() {
+            window.location.href = '@Url.Action("OrderCreate", "Admin")';
+        }
+
+        function quickSearchOrders() {
+
+            const term = document.getElementById('orderQuickSearch').value.trim();
+            const grid = Tech.Grid.get('ordersGrid');
+
+            if (!grid) return;
+
+            if (term) {
+                grid.setFilter('Number', term, 'contains');
+            }
+            else {
+                grid.setFilter('Number', null);
+            }
+
+            grid.refresh();
+        }
+
+        document.getElementById('orderQuickSearch')
+            .addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    quickSearchOrders();
+                }
+            });
+
+        document.getElementById('orderStatusFilter')
+            .addEventListener('change', function () {
+
+                const grid = Tech.Grid.get('ordersGrid');
+
+                if (!grid) return;
+
+                const value = this.value;
+
+                if (value === '') {
+                    grid.setFilter('Status', null);
+                }
+                else {
+                    grid.setFilter('Status', value, 'eq');
+                }
+
+                grid.refresh();
+            });
+    </script>
+}

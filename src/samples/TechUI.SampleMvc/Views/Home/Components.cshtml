@@ -1,0 +1,136 @@
+@{
+    ViewData["Title"] = "Components";
+}
+
+<h1>تب‌ها، آکاردئون و اسپینر</h1>
+
+<h2 class="h4 mt-4">Tabs</h2>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        @(Html.Tech().Tabs("settingsTabs")
+            .Item("عمومی",
+                "<p class=\"mb-0\">تنظیمات عمومی حساب کاربری، نام نمایشی و زبان رابط کاربری.</p>")
+            .Item("امنیت",
+                "<p class=\"mb-0\">تغییر رمز عبور، ورود دو مرحله‌ای و دستگاه‌های فعال.</p>")
+            .Item("اعلان‌ها",
+                "<p class=\"mb-0\">انتخاب کانال دریافت اعلان‌ها: ایمیل، پیامک یا درون‌برنامه.</p>",
+                true)
+            .Change("onTabChanged"))
+    </div>
+    <div class="col-lg-5">
+        <div class="alert alert-light border mb-0">
+            <div><strong>رویداد:</strong> <span id="tabsLog">—</span></div>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="tabApiButton">
+                رفتن به تب اول با API
+            </button>
+        </div>
+    </div>
+</div>
+
+<h2 class="h4 mt-5">Tabs (Pills)</h2>
+
+@(Html.Tech().Tabs("pillTabs")
+    .Pills()
+    .Item("خلاصه", "<p class=\"mb-0\">نمای کلی از وضعیت سفارش‌ها.</p>")
+    .Item("جزئیات", "<p class=\"mb-0\">اقلام، تخفیف‌ها و هزینه ارسال.</p>")
+    .Item("تاریخچه", "<p class=\"mb-0\">تغییرات وضعیت سفارش در بازه‌های زمانی.</p>"))
+
+<h2 class="h4 mt-5">Accordion</h2>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <h3 class="h6 text-muted">تک‌بازشو (پیش‌فرض)</h3>
+        @(Html.Tech().Accordion("faqAccordion")
+            .Item("روش‌های ارسال چگونه است؟",
+                "<p class=\"mb-0\">ارسال عادی ۳ تا ۵ روز کاری و ارسال سریع ۱ روز کاری.</p>",
+                true)
+            .Item("امکان مرجوعی وجود دارد؟",
+                "<p class=\"mb-0\">تا ۷ روز پس از دریافت، در صورت سالم بودن بسته.</p>")
+            .Item("پشتیبانی چه ساعتی پاسخ می‌دهد؟",
+                "<p class=\"mb-0\">شنبه تا پنجشنبه، ساعت ۹ تا ۱۸.</p>")
+            .Change("onAccordionChanged"))
+        <div class="text-muted small mt-2">آخرین رویداد: <span id="accordionLog">—</span></div>
+    </div>
+    <div class="col-lg-6">
+        <h3 class="h6 text-muted">چند‌بازشو</h3>
+        @(Html.Tech().Accordion("multiAccordion")
+            .Multiple()
+            .Flush()
+            .Item("قوانین استفاده",
+                "<p class=\"mb-0\">استفاده از سرویس به معنی پذیرش قوانین است.</p>",
+                true)
+            .Item("حریم خصوصی",
+                "<p class=\"mb-0\">اطلاعات شما فقط برای ارائه سرویس استفاده می‌شود.</p>")
+            .Item("شرایط بازگشت وجه",
+                "<p class=\"mb-0\">بازگشت وجه حداکثر تا ۷۲ ساعت کاری انجام می‌شود.</p>"))
+    </div>
+</div>
+
+<h2 class="h4 mt-5">Spinner</h2>
+
+<div class="d-flex align-items-center flex-wrap gap-4 mb-3">
+    @Html.Tech().Spinner()
+    @Html.Tech().Spinner().Size("sm").Label("در حال ذخیره")
+    @Html.Tech().Spinner().Size("lg").Color("success")
+    @Html.Tech().Spinner().Color("danger").Label("اتصال قطع شد")
+    @Html.Tech().Spinner().Color("secondary").Label("در حال پردازش")
+</div>
+
+<div class="row g-4 align-items-stretch">
+    <div class="col-md-7">
+        <div id="spinnerBox" class="border rounded p-3" style="min-height: 150px;">
+            <h3 class="h6">ناحیه دارای لودینگ</h3>
+            <p class="mb-0 text-muted">
+                با کلیک روی دکمه، لایه لودینگ روی این ناحیه نمایش داده می‌شود و
+                بعد از ۱.۵ ثانیه برداشته می‌شود.
+            </p>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <button type="button" class="btn btn-primary" id="spinnerButton">
+            نمایش لودینگ
+        </button>
+        <div class="alert alert-light border mt-3 mb-0">
+            <code>Tech.Spinner.overlay('#spinnerBox', { label: 'در حال بارگذاری...' })</code>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function onTabChanged(ev) {
+            document.getElementById('tabsLog').textContent =
+                'تب «' + ev.tab.textContent + '» (اندیس ' + ev.index + ')';
+        }
+
+        function onAccordionChanged(ev) {
+            document.getElementById('accordionLog').textContent =
+                (ev.open ? 'باز شد: ' : 'بسته شد: ') + 'آیتم ' + (ev.index + 1);
+        }
+
+        document.getElementById('tabApiButton')
+            .addEventListener('click', function () {
+                Tech.Tabs.select('settingsTabs', 0);
+            });
+
+        let loader = null;
+
+        document.getElementById('spinnerButton')
+            .addEventListener('click', function () {
+                if (loader) loader.remove();
+
+                loader = Tech.Spinner.overlay('#spinnerBox', {
+                    size: 'lg',
+                    label: 'در حال بارگذاری...'
+                });
+
+                setTimeout(function () {
+                    if (loader) {
+                        loader.remove();
+                        loader = null;
+                    }
+                }, 1500);
+            });
+    </script>
+}

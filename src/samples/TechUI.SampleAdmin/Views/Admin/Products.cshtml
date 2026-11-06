@@ -1,0 +1,138 @@
+@inject SettingsService AppSettings
+@{
+    ViewData["Title"] = "محصولات";
+
+    var defaultPageSize = AppSettings.Load().DefaultPageSize;
+    var pageSizes = new[] { 10, defaultPageSize, 25, 50 }
+        .Distinct()
+        .OrderBy(size => size)
+        .ToArray();
+}
+
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
+    <div>
+        <h2 class="h5 mb-1">کاتالوگ محصولات</h2>
+        <p class="text-muted small mb-0">
+            فیلتر نوع‌آگاه روی قیمت و موجودی، به‌همراه ستون‌های قابل نمایش.
+        </p>
+    </div>
+
+    <div class="input-group admin-quick-search">
+        <span class="input-group-text bg-transparent">
+            <i class="bi bi-search"></i>
+        </span>
+        <input type="search" id="productQuickSearch" class="form-control"
+               placeholder="جستجوی سریع نام..." aria-label="جستجوی محصول" />
+        <button type="button" class="btn btn-outline-secondary"
+                onclick="quickSearchProducts()">
+            جستجو
+        </button>
+    </div>
+</div>
+
+@(Html.Tech().Grid<Product>()
+    .Name("productsGrid")
+    .DataSource(ds => ds
+        .Read("ProductGrid", "Admin")
+        .Type(TechHttpMethod.Post))
+    .Pageable()
+    .Sortable()
+    .Filterable()
+    .Resizable()
+    .PageSize(defaultPageSize)
+    .PageSizes(pageSizes)
+    .Height(620)
+    .Toolbar(t =>
+    {
+        t.Create("محصول جدید", "onProductCreate");
+        t.Refresh("بازخوانی");
+        t.ColumnChooser();
+    })
+    .Columns(c =>
+    {
+        c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(85);
+
+        c.Bound(x => x.Name)
+            .Title("نام محصول")
+            .Width(250);
+
+        c.Bound(x => x.Sku)
+            .Title("کد کالا")
+            .Width(120);
+
+        c.Bound(x => x.Category!.Name)
+            .Title("دسته‌بندی")
+            .Width(190);
+
+        c.Template("{{= formatNumber(Price) }} ریال")
+            .Title("قیمت")
+            .Width(150)
+            .Filterable(false);
+
+        c.Template(
+            "<span class='badge {{= stockBadge(Stock) }}'>" +
+            "{{= formatNumber(Stock) }} عدد</span>")
+            .Title("موجودی")
+            .Width(110)
+            .Filterable(false);
+
+        c.Template("{{= formatDate(CreatedOn) }}")
+            .Title("تاریخ ثبت")
+            .Width(125)
+            .Filterable(false);
+
+        c.Template(
+            "{{ if (IsActive) { }}" +
+            "<span class='badge bg-success'>فعال</span>" +
+            "{{ } else { }}" +
+            "<span class='badge bg-secondary'>غیرفعال</span>" +
+            "{{ } }}")
+            .Title("وضعیت")
+            .Width(95)
+            .Filterable(false);
+
+        c.Template(
+            "<a class='btn btn-sm btn-outline-primary me-1' " +
+            "href='/Admin/ProductEdit/{{Id}}' title='ویرایش'>" +
+            "<i class='bi bi-pencil'></i></a>" +
+            "<button type='button' class='btn btn-sm btn-outline-danger' " +
+            "onclick='deleteProduct({{Id}})' title='حذف'>" +
+            "<i class='bi bi-trash'></i></button>")
+            .Title("عملیات")
+            .Width(125);
+    }))
+
+@section Scripts {
+    <script>
+        function onProductCreate() {
+            window.location.href = '@Url.Action("ProductCreate", "Admin")';
+        }
+
+        function quickSearchProducts() {
+
+            const term = document.getElementById('productQuickSearch').value.trim();
+            const grid = Tech.Grid.get('productsGrid');
+
+            if (!grid) return;
+
+            if (term) {
+                grid.setFilter('Name', term, 'contains');
+            }
+            else {
+                grid.clearFilters();
+            }
+
+            grid.refresh();
+        }
+
+        document.getElementById('productQuickSearch')
+            .addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    quickSearchProducts();
+                }
+            });
+    </script>
+}

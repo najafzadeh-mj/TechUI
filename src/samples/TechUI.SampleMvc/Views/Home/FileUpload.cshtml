@@ -1,0 +1,176 @@
+﻿@{
+    ViewData["Title"] = "FileUpload";
+    var uploaded = ViewBag.Submitted as List<(string Name, long Size)>;
+}
+
+<h1>آپلود فایل</h1>
+<p class="text-muted">
+    ناحیهٔ رهاکردن فایل با اعتبارسنجی پسوند، حجم و تعداد، نوار پیشرفت
+    برای آپلود AJAX و حالت فرم بومی (بدون جاوااسکریپت).
+</p>
+
+<div dir="rtl" lang="fa" class="tech-rtl">
+
+    @if (uploaded is not null && uploaded.Count > 0)
+    {
+        <div class="alert alert-success">
+            <strong>فایل‌های دریافتی فرم:</strong>
+            <ul class="mb-0">
+                @foreach (var item in uploaded)
+                {
+                    <li>@item.Name — @(Math.Round(item.Size / 1024d, 1)) KB</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="row g-4">
+
+        <div class="col-12 col-xl-7">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5 mb-1">آپلود AJAX چندفایلی</h2>
+                    <p class="text-muted small mb-3">
+                        فایل‌ها بلافاصله و یکی‌یکی به اکشن
+                        <code>Home/Upload</code> ارسال می‌شوند و شناسهٔ هر
+                        فایل در فیلد مخفی <code>attachments</code> قرار می‌گیرد.
+                    </p>
+
+                    @(Html.Tech().FileUpload("attachments")
+                        .Multiple()
+                        .Accept(".png", ".jpg", ".jpeg", ".pdf", ".zip")
+                        .MaxSizeMb(10)
+                        .MaxFiles(5)
+                        .Url(Url.Action("Upload", "Home")!)
+                        .Events(events => events
+                            .Change("onUploadChange")
+                            .Success("onUploadSuccess")
+                            .Error("onUploadError")
+                            .Complete("onUploadComplete")))
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5 mb-1">آواتار (تک‌فایل، فقط تصویر)</h2>
+                    <p class="text-muted small mb-3">
+                        حالت تک‌فایل؛ انتخاب فایل جدید جای قبلی را می‌گیرد.
+                    </p>
+
+                    @(Html.Tech().FileUpload("avatar")
+                        .Accept("image/png", "image/jpeg", "image/webp")
+                        .MaxSizeMb(2)
+                        .Url(Url.Action("Upload", "Home", new { kind = "image" })!)
+                        .Title("تصویر پروفایل را اینجا رها کنید")
+                        .Hint("PNG، JPG یا WebP — حداکثر ۲ مگابایت")
+                        .BrowseText("انتخاب تصویر"))
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-7">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5 mb-1">آپلود دستی</h2>
+                    <p class="text-muted small mb-3">
+                        <code>AutoUpload(false)</code>؛ فایل‌ها ابتدا صف می‌شوند
+                        و با دکمهٔ «شروع آپلود» یا
+                        <code>Tech.FileUpload.get('manualUpload').upload()</code>
+                        ارسال می‌شوند.
+                    </p>
+
+                    @(Html.Tech().FileUpload("manualUpload")
+                        .Multiple()
+                        .Accept(".pdf", ".txt", ".zip")
+                        .MaxSizeMb(5)
+                        .AutoUpload(false)
+                        .Url(Url.Action("Upload", "Home")!))
+
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="logManualFiles()">
+                            فایل‌های انتخاب‌شده
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                onclick="clearManualFiles()">
+                            پاک‌کردن فهرست
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h5 mb-1">فرم بومی (بدون Url)</h2>
+                    <p class="text-muted small mb-3">
+                        بدون <code>Url</code>، فایل‌ها با ارسال معمولی فرم به
+                        کنترلر می‌رسند و اعتبارسنجی الزامی در کلاینت انجام
+                        می‌شود.
+                    </p>
+
+                    <form asp-action="FileUpload" method="post"
+                          enctype="multipart/form-data">
+                        @(Html.Tech().FileUpload("documents")
+                            .Multiple()
+                            .Required()
+                            .Accept(".pdf", ".doc", ".docx")
+                            .MaxSizeMb(10)
+                            .MaxFiles(3))
+
+                        <button type="submit" class="btn btn-primary btn-sm mt-3">
+                            ارسال فرم
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h2 class="h6 text-muted">گزارش رویدادها</h2>
+        <pre id="uploadLog" class="small bg-light border rounded p-3 mb-0"
+             style="min-height: 4.5rem; white-space: pre-wrap;"></pre>
+    </div>
+</div>
+
+<script>
+    function writeLog(message) {
+        var log = document.getElementById('uploadLog');
+
+        log.textContent = message + '\n' + log.textContent;
+    }
+
+    function onUploadChange(e) {
+        writeLog('change: ' + e.files.length + ' فایل');
+    }
+
+    function onUploadSuccess(e) {
+        writeLog('success: ' + e.file.name + ' → ' + e.file.value);
+    }
+
+    function onUploadError(e) {
+        writeLog('error: ' + e.file.name + ' — ' + e.message);
+    }
+
+    function onUploadComplete(e) {
+        writeLog('complete: ' + e.files.length + ' فایل ثبت شد');
+    }
+
+    function logManualFiles() {
+        var upload = Tech.FileUpload.get('manualUpload');
+
+        writeLog('manual: ' + JSON.stringify(
+            upload.getFiles().map(function (file) {
+                return { name: file.name, status: file.status };
+            })));
+    }
+
+    function clearManualFiles() {
+        Tech.FileUpload.get('manualUpload').clear();
+        writeLog('manual: فهرست پاک شد');
+    }
+</script>

@@ -1,0 +1,30 @@
+@model TechUI.SampleMvc.Models.WizardSampleModel
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" asp-for="Company"></label>
+        <input asp-for="Company"
+               class="form-control tech-input-control"
+               placeholder="نام شرکت یا تیم" />
+        <span asp-validation-for="Company" class="tech-validation-message"></span>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" asp-for="Plan"></label>
+        <select asp-for="Plan" class="form-control tech-input-control">
+            <option value="">-- انتخاب کنید --</option>
+            <option value="basic">پایه</option>
+            <option value="pro">حرفه‌ای</option>
+            <option value="enterprise">سازمانی</option>
+        </select>
+        <span asp-validation-for="Plan" class="tech-validation-message"></span>
+    </div>
+    <div class="col-12">
+        <label class="form-label" asp-for="Notes"></label>
+        <textarea asp-for="Notes"
+                  class="form-control tech-input-control"
+                  rows="3"
+                  maxlength="300"
+                  placeholder="هر توضیحی که لازم است (اختیاری)"></textarea>
+        <span asp-validation-for="Notes" class="tech-validation-message"></span>
+    </div>
+</div>

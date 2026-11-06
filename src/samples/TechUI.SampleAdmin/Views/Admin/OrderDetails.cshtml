@@ -1,0 +1,192 @@
+@model Order
+@using System.Globalization
+@inject SettingsService AppSettings
+@{
+    ViewData["Title"] = "جزئیات سفارش";
+
+    var fa = CultureInfo.GetCultureInfo("fa-IR");
+    var calendar = new PersianCalendar();
+    var currency = AppSettings.Load().Currency;
+
+    string Date(DateTime value) =>
+        $"{calendar.GetYear(value):0000}/{calendar.GetMonth(value):00}/{calendar.GetDayOfMonth(value):00}";
+
+    string Money(decimal value) => value.ToString("N0", fa) + " " + currency;
+
+    var customerOrders = ViewBag.CustomerOrders as List<Order> ?? new List<Order>();
+    var customer = Model.Customer;
+    var tags = (customer?.Tags ?? string.Empty)
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var statusClass = Model.Status.ToBadgeClass();
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">
+            سفارش <span dir="ltr">@Model.Number</span>
+            <span class="badge @statusClass">@Model.Status.ToPersian()</span>
+        </h2>
+        <p class="text-muted small mb-0">
+            تاریخ ثبت: @Date(Model.OrderDate) — شناسه داخلی: @Model.Id
+        </p>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Orders">
+            <i class="bi bi-arrow-right"></i>
+            بازگشت
+        </a>
+        <a class="btn btn-primary" asp-controller="Admin" asp-action="OrderEdit"
+           asp-route-id="@Model.Id">
+            <i class="bi bi-pencil"></i>
+            ویرایش سفارش
+        </a>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <section class="admin-card detail-card">
+        <div class="detail-card-header">
+            <span class="detail-card-icon"><i class="bi bi-receipt"></i></span>
+            <h3>مشخصات سفارش</h3>
+        </div>
+
+        <dl class="detail-list">
+            <div>
+                <dt>شماره سفارش</dt>
+                <dd dir="ltr">@Model.Number</dd>
+            </div>
+            <div>
+                <dt>وضعیت</dt>
+                <dd><span class="badge @statusClass">@Model.Status.ToPersian()</span></dd>
+            </div>
+            <div>
+                <dt>تاریخ سفارش</dt>
+                <dd>@Date(Model.OrderDate)</dd>
+            </div>
+            <div>
+                <dt>مبلغ کل</dt>
+                <dd class="detail-amount">@Money(Model.Total)</dd>
+            </div>
+        </dl>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Note))
+        {
+            <div class="detail-note">
+                <span class="text-muted small d-block mb-1">یادداشت سفارش</span>
+                @Model.Note
+            </div>
+        }
+    </section>
+
+    <section class="admin-card detail-card">
+        <div class="detail-card-header">
+            <span class="detail-card-icon"><i class="bi bi-person-badge"></i></span>
+            <h3>مشتری</h3>
+        </div>
+
+        @if (customer is null)
+        {
+            <p class="text-muted mb-0">اطلاعات مشتری در دسترس نیست.</p>
+        }
+        else
+        {
+            <div class="customer-mini">
+                <span class="admin-avatar">@customer.FullName.FirstOrDefault()</span>
+                <div>
+                    <strong>@customer.FullName</strong>
+                    <div class="text-muted small">@customer.City</div>
+                </div>
+                <span class="badge @(customer.IsActive ? "bg-success" : "bg-secondary")">
+                    @(customer.IsActive ? "فعال" : "غیرفعال")
+                </span>
+            </div>
+
+            <dl class="detail-list">
+                <div>
+                    <dt>ایمیل</dt>
+                    <dd dir="ltr">@customer.Email</dd>
+                </div>
+                <div>
+                    <dt>موبایل</dt>
+                    <dd dir="ltr">@(customer.Phone ?? "—")</dd>
+                </div>
+                <div>
+                    <dt>اعتبار حساب</dt>
+                    <dd>@Money(customer.Credit)</dd>
+                </div>
+                <div>
+                    <dt>تاریخ عضویت</dt>
+                    <dd>@Date(customer.RegisteredOn)</dd>
+                </div>
+            </dl>
+
+            @if (tags.Length > 0)
+            {
+                <div class="d-flex flex-wrap gap-1">
+                    @foreach (var tag in tags)
+                    {
+                        <span class="badge bg-primary-subtle text-primary-emphasis">@tag</span>
+                    }
+                </div>
+            }
+
+            <a class="btn btn-sm btn-outline-primary mt-3"
+               asp-controller="Admin" asp-action="CustomerEdit"
+               asp-route-id="@customer.Id">
+                <i class="bi bi-pencil-square"></i>
+                ویرایش مشتری
+            </a>
+        }
+    </section>
+</div>
+
+<section class="admin-card detail-card mt-3">
+    <div class="detail-card-header">
+        <span class="detail-card-icon"><i class="bi bi-clock-history"></i></span>
+        <h3>سایر سفارش‌های این مشتری</h3>
+    </div>
+
+    @if (customerOrders.Count == 0)
+    {
+        <p class="text-muted mb-0">سفارش دیگری برای این مشتری ثبت نشده است.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>تاریخ</th>
+                        <th>وضعیت</th>
+                        <th>مبلغ</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in customerOrders)
+                    {
+                        <tr>
+                            <td dir="ltr">@item.Number</td>
+                            <td>@Date(item.OrderDate)</td>
+                            <td>
+                                <span class="badge @item.Status.ToBadgeClass()">
+                                    @item.Status.ToPersian()
+                                </span>
+                            </td>
+                            <td>@Money(item.Total)</td>
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   asp-controller="Admin" asp-action="OrderDetails"
+                                   asp-route-id="@item.Id">
+                                    مشاهده
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -1,0 +1,152 @@
+@model TechUI.SampleMvc.Models.ModalSampleModel
+@using TechUI.Mvc.DropDownList
+
+@{
+    ViewData["Title"] = "Modal";
+
+    var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.ModalSampleModel;
+}
+
+<h1>کامپوننت‌ها در مدال بوت‌استرپ</h1>
+
+<p class="text-muted">
+    DropDownList با فیلتر سمت کلاینت و سمت سرور (GET و POST)، تاریخ، ساعت و ورودی متنی
+    داخل یک مدال با بدنه اسکرول‌شونده.
+</p>
+
+<button type="button" class="btn btn-primary"
+        data-bs-toggle="modal" data-bs-target="#techSampleModal">
+    باز کردن مدال
+</button>
+
+@if (submitted is not null)
+{
+    <div class="alert alert-success mt-3">
+        <div><strong>نام:</strong> @submitted.FullName</div>
+        <div><strong>دسته (کلاینت):</strong> @submitted.ClientCategoryId</div>
+        <div><strong>دسته (سرور GET):</strong> @submitted.ServerCategoryId</div>
+        <div><strong>دسته (سرور POST):</strong> @submitted.PostCategoryId</div>
+        <div><strong>تاریخ:</strong> @submitted.BirthDate</div>
+        <div><strong>ساعت:</strong> @submitted.StartTime</div>
+    </div>
+}
+
+<div class="modal fade" id="techSampleModal" tabindex="-1"
+     aria-labelledby="techSampleModalLabel" aria-hidden="true">
+
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+
+            <form asp-action="Modal" method="post">
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="techSampleModalLabel">
+                        فرم داخل مدال
+                    </h5>
+                    <button type="button" class="btn-close"
+                            data-bs-dismiss="modal" aria-label="بستن"></button>
+                </div>
+
+                <div class="modal-body" style="max-height: 420px; overflow-y: auto;">
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="FullName">نام</label>
+                            @(Html.Tech().TextBoxFor<ModalSampleModel, string?>(m => m.FullName)
+                                .Placeholder("نام کامل")
+                                .Clearable())
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="BirthDate">تاریخ</label>
+                            @(Html.Tech().DatePickerFor<ModalSampleModel, DateTime?>(m => m.BirthDate)
+                                .Placeholder("تاریخ")
+                                .Min(new DateTime(1900, 1, 1))
+                                .Max(DateTime.Today))
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="ClientCategoryId">
+                                فیلتر کلاینت (GET کامل)
+                            </label>
+                            @(Html.Tech().DropDownListFor<ModalSampleModel, int?>(m => m.ClientCategoryId)
+                                .OptionLabel("-- انتخاب کنید --")
+                                .Filterable()
+                                .DataTextField("Text")
+                                .DataValueField("Id")
+                                .DataSource(ds => ds.Read("GetDropDownList", "Home")))
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="ServerCategoryId">
+                                فیلتر سرور (GET)
+                            </label>
+                            @(Html.Tech().DropDownListFor<ModalSampleModel, int?>(m => m.ServerCategoryId)
+                                .OptionLabel("-- انتخاب کنید --")
+                                .Filterable()
+                                .ServerFiltering()
+                                .MinLength(1)
+                                .DataTextField("Text")
+                                .DataValueField("Id")
+                                .DataSource(ds => ds.Read("GetDropDownList", "Home")))
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="PostCategoryId">
+                                فیلتر سرور (POST)
+                            </label>
+                            @(Html.Tech().DropDownListFor<ModalSampleModel, int?>(m => m.PostCategoryId)
+                                .OptionLabel("-- انتخاب کنید --")
+                                .Filterable()
+                                .ServerFiltering()
+                                .MinLength(1)
+                                .DataTextField("Text")
+                                .DataValueField("Id")
+                                .DataSource(ds => ds.Read("GetDropDownListPost", "Home")
+                                    .Type(TechHttpMethod.Post)))
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="StartTime">ساعت</label>
+                            @(Html.Tech().TimePickerFor<ModalSampleModel, TimeSpan?>(m => m.StartTime)
+                                .Step(5)
+                                .ClearButton())
+                        </div>
+
+                        <div class="col-12">
+                            <p class="mb-0 text-muted small">
+                                بدنه این مدال عمداً اسکرول می‌شود تا باز شدن پنل
+                                کامپوننت‌ها هنگام اسکرول بررسی شود. فیلتر را تایپ کنید،
+                                سپس مدال را اسکرول کنید.
+                            </p>
+                            <div style="height: 120px;"></div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary"
+                            data-bs-dismiss="modal">
+                        انصراف
+                    </button>
+                    <button type="submit" class="btn btn-primary">ثبت</button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // پنل‌های باز با بستن مدال خودکار بسته می‌شوند
+        document.getElementById('techSampleModal')
+            .addEventListener('hidden.bs.modal', function () {
+                console.log('modal closed; TechUI popups released');
+            });
+    </script>
+}

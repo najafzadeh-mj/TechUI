@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+    <PackageId>TechUI.Mvc</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Majid Najafzadeh</Authors>
+    <Company>Ti1co</Company>
+    <Description>Lightweight ASP.NET Core MVC UI components inspired by Kendo UI</Description>
+    <PackageTags>aspnetcore; mvc; grid; ui; datagrid; wizard; timeline; breadcrumb; chart; rtl</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/najafzadeh-mj/TechUI</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/najafzadeh-mj/TechUI</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

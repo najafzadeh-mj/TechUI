@@ -1,0 +1,142 @@
+@model CustomerFormModel
+@{
+    var isEdit = Model.Id > 0;
+    ViewData["Title"] = isEdit ? "ویرایش مشتری" : "مشتری جدید";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">@ViewData["Title"]</h2>
+        <p class="text-muted small mb-0">
+            اطلاعات مشتری را با اعتبارسنجی سمت کلاینت و سرور ثبت کنید.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Customers">
+        <i class="bi bi-arrow-right"></i>
+        بازگشت به فهرست
+    </a>
+</div>
+
+<form asp-controller="Admin"
+      asp-action="@(isEdit ? "CustomerEdit" : "CustomerCreate")"
+      method="post"
+      class="admin-card form-card p-4"
+      novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            لطفاً خطاهای مشخص‌شده را برطرف کنید.
+        </div>
+    }
+
+    <div class="form-grid">
+        <div>
+            <label class="form-label" for="FullName">نام و نام خانوادگی</label>
+            @(Html.Tech().TextBoxFor<CustomerFormModel, string>(m => m.FullName)
+                .Placeholder("مثلاً سارا محمدی")
+                .PrefixIcon("person")
+                .MaxLength(120)
+                .Clearable())
+        </div>
+
+        <div>
+            <label class="form-label" for="Email">ایمیل</label>
+            @(Html.Tech().TextBoxFor<CustomerFormModel, string>(m => m.Email)
+                .Type("email")
+                .Placeholder("name@example.com")
+                .PrefixIcon("envelope")
+                .InputMode("email"))
+        </div>
+
+        <div>
+            <label class="form-label" for="Phone">شماره موبایل</label>
+            @(Html.Tech().TextBoxFor<CustomerFormModel, string?>(m => m.Phone)
+                .Placeholder("09121234567")
+                .PrefixIcon("phone")
+                .InputMode("numeric")
+                .MaxLength(11))
+            <div class="form-hint">۱۱ رقم و با ۰۹ شروع شود.</div>
+        </div>
+
+        <div>
+            <label class="form-label" for="Credit">اعتبار حساب (ریال)</label>
+            @(Html.Tech().NumericTextBoxFor<CustomerFormModel, decimal>(m => m.Credit)
+                .Min(0)
+                .Max(1_000_000_000)
+                .Step(100_000)
+                .Decimals(0)
+                .Culture("fa-IR")
+                .SuffixIcon("cash-stack"))
+        </div>
+
+        <div>
+            <label class="form-label" for="City">شهر</label>
+            @(Html.Tech().DropDownTreeFor<CustomerFormModel, string>(m => m.City)
+                .Items(items => items
+                    .Add("تهران", "تهران")
+                    .Add("مشهد", "مشهد")
+                    .Add("اصفهان", "اصفهان")
+                    .Add("شیراز", "شیراز")
+                    .Add("تبریز", "تبریز")
+                    .Add("کرج", "کرج")
+                    .Add("اهواز", "اهواز")
+                    .Add("قم", "قم"))
+                .Placeholder("انتخاب شهر")
+                .Filterable())
+        </div>
+
+        <div>
+            <label class="form-label" for="RegisteredOn">تاریخ عضویت</label>
+            @(Html.Tech().DatePickerFor<CustomerFormModel, DateTime>(m => m.RegisteredOn)
+                .Max(DateTime.Today)
+                .TodayButton())
+        </div>
+
+        <div class="span-2">
+            <label class="form-label">برچسب‌ها</label>
+            @(Html.Tech().MultiSelectFor<CustomerFormModel, List<string>>(m => m.Tags)
+                .Items(items => items
+                    .Add("وفادار")
+                    .Add("عمده‌فروش")
+                    .Add("خرده‌فروش")
+                    .Add("سازمانی")
+                    .Add("مشتری جدید"))
+                .AllowCustom()
+                .Filterable()
+                .Placeholder("انتخاب یا تایپ برچسب..."))
+            <div class="form-hint">
+                می‌توانید برچسب دلخواه بنویسید و با Enter اضافه کنید.
+            </div>
+        </div>
+
+        <div class="span-2">
+            <label class="form-label" for="Notes">یادداشت</label>
+            @(Html.Tech().TextAreaFor<CustomerFormModel, string?>(m => m.Notes)
+                .Rows(4)
+                .AutoGrow()
+                .MaxLength(1000)
+                .ShowCounter()
+                .Placeholder("یادداشت داخلی درباره مشتری..."))
+        </div>
+
+        <div class="span-2">
+            @(Html.Tech().CheckBoxFor<CustomerFormModel, bool>(m => m.IsActive)
+                .Label("مشتری فعال است و می‌تواند سفارش ثبت کند.")
+                .Switch())
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Customers">
+            انصراف
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check2"></i>
+            @(isEdit ? "ذخیره تغییرات" : "ثبت مشتری")
+        </button>
+    </div>
+</form>
