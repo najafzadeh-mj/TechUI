@@ -37,6 +37,12 @@
 
 ## راه‌اندازی
 
+پیش‌نیاز ظاهری: **Bootstrap 5.3 (CSS)** برای فرم‌ها، دکمه‌ها و badge‌ها و
+**Bootstrap Icons** برای آیکن‌ها. هر دو جزو دارایی‌های peer هستند و همراه بسته
+نصب نمی‌شوند. TechUI به جاوااسکریپت Bootstrap نیاز ندارد؛ فایل
+`bootstrap.bundle.min.js` را فقط در صورت استفاده از کامپوننت‌های تعاملی خود
+Bootstrap بارگذاری کنید.
+
 در `_ViewImports.cshtml`:
 
 ```razor
@@ -44,10 +50,16 @@
 @using TechUI.Mvc.Infrastructure
 ```
 
-در `_Layout.cshtml`:
+در `_Layout.cshtml` (Bootstrap CSS قبل از `techui.css` بارگذاری شود تا
+override‌های کامپوننت‌ها اعمال شوند):
 
 ```html
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
 <link rel="stylesheet" href="~/_content/TechUI.Mvc/css/techui.css" />
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+...
 <script src="~/_content/TechUI.Mvc/js/techui.js"></script>
 ```
 

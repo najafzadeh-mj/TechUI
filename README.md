@@ -1,7 +1,8 @@
 # TechUI.Mvc
 
-Lightweight, dependency-free UI components for **ASP.NET Core MVC 9**, with a fluent
-server-side builder API (`@Html.Tech()...`), no TagHelpers, and Persian-first defaults.
+Lightweight UI components for **ASP.NET Core MVC 9** with no JavaScript
+dependencies, a fluent server-side builder API (`@Html.Tech()...`), no
+TagHelpers, and Persian-first defaults.
 
 - Server-rendered HTML with progressive JavaScript enhancement.
 - RTL-ready (`.tech-rtl` wrapper) and dark theme (`data-tech-theme="dark"`).
@@ -12,7 +13,8 @@ server-side builder API (`@Html.Tech()...`), no TagHelpers, and Persian-first de
 ## Requirements
 
 - .NET 9 / ASP.NET Core MVC
-- Bootstrap 5.x (form styling and buttons) and Bootstrap Icons
+- Bootstrap 5.3 CSS (form styling, badges and utilities) and Bootstrap Icons;
+  both are peer assets and are not bundled with the package
 - A modern browser
 
 ## Packages
@@ -40,12 +42,18 @@ dotnet add package TechUI.Mvc.EntityFrameworkCore
    (RCL static assets are served from `_content`):
 
 ```html
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
 <link rel="stylesheet" href="~/_content/TechUI.Mvc/css/techui.css" />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 ...
 <script src="~/_content/TechUI.Mvc/js/techui.js"></script>
 ```
+
+Load Bootstrap CSS before `techui.css` so the component overrides win. TechUI
+does not need Bootstrap's JavaScript; load `bootstrap.bundle.min.js` only if you
+use Bootstrap's own interactive components.
 
 3. Render any component with the `Tech()` helper:
 
@@ -133,8 +141,15 @@ Full fluent API and JavaScript API reference:
 
 A runnable sample for every component lives in `src/samples/TechUI.SampleMvc`.
 A complete Persian admin panel — SQLite + EF Core, dashboard, server-side grids,
-validated CRUD, reports and settings — lives in `src/samples/TechUI.SampleAdmin`
-(run with `dotnet run --project src/samples/TechUI.SampleAdmin`).
+validated CRUD, reports and settings — lives in `src/samples/TechUI.SampleAdmin`.
+
+Build and run from the repository root:
+
+```bash
+dotnet build TechUI.sln
+dotnet run --project src/samples/TechUI.SampleMvc
+dotnet run --project src/samples/TechUI.SampleAdmin
+```
 
 ## License
 
