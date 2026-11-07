@@ -29,6 +29,8 @@ namespace TechUI.Mvc.Grid
         private readonly GridEventOptions _events = new();
         private readonly List<GridToolbarItem> _toolbarItems = new();
 
+        private GridChatOptions? _chat;
+
         private bool _resizable;
         private int? _height;
 
@@ -106,6 +108,21 @@ namespace TechUI.Mvc.Grid
             return this;
         }
 
+        /// <summary>
+        /// Enables the built-in AI chat panel. Commands are sent to
+        /// <c>GridChatBuilder.Url</c>; TechUI ships no AI dependency.
+        /// </summary>
+        public GridBuilder<TModel> Chat(Action<GridChatBuilder> action)
+        {
+            var options = new GridChatOptions();
+
+            action(new GridChatBuilder(options));
+
+            _chat = options;
+
+            return this;
+        }
+
         public GridBuilder<TModel> PageSizeSelector(bool enabled = true)
         {
             _pageSizeSelector = enabled;
@@ -140,6 +157,12 @@ namespace TechUI.Mvc.Grid
         /// </summary>
         public void WriteTo(TextWriter writer, HtmlEncoder encoder)
         {
+            if (_chat is not null && string.IsNullOrWhiteSpace(_chat.Url))
+            {
+                throw new InvalidOperationException(
+                    "Grid chat requires an endpoint. Call .Chat(c => c.Url(...)).");
+            }
+
             var container = new TagBuilder("div");
 
             container.Attributes["id"] = _name;
@@ -174,7 +197,7 @@ namespace TechUI.Mvc.Grid
                 ? "POST"
                 : "GET";
 
-            if (_dataSource.Method == TechHttpMethod.Post)
+            if (_dataSource.Method == TechHttpMethod.Post || _chat is not null)
             {
                 var token = TechAntiforgery.GetToken(_html);
 
@@ -214,7 +237,7 @@ namespace TechUI.Mvc.Grid
 
             container.InnerHtml.AppendHtml(overlay);
 
-            if (_toolbarItems.Count > 0)
+            if (_toolbarItems.Count > 0 || _chat is not null)
             {
                 var toolbar = new TagBuilder("div");
                 toolbar.AddCssClass("tech-grid-toolbar d-flex align-items-center gap-2 p-2 border-bottom flex-wrap");
@@ -222,6 +245,11 @@ namespace TechUI.Mvc.Grid
                 foreach (var item in _toolbarItems)
                 {
                     toolbar.InnerHtml.AppendHtml(BuildToolbarButton(item));
+                }
+
+                if (_chat is not null)
+                {
+                    toolbar.InnerHtml.AppendHtml(BuildChatButton(_chat));
                 }
 
                 container.InnerHtml.AppendHtml(toolbar);
@@ -302,15 +330,47 @@ namespace TechUI.Mvc.Grid
 
             var nameJson = JsonSerializer.Serialize(_name);
 
+            var chatJson = _chat is null
+                ? "null"
+                : JsonSerializer.Serialize(new
+                {
+                    url = _chat.Url,
+                    title = _chat.Title,
+                    placeholder = _chat.Placeholder,
+                    welcome = _chat.Welcome,
+                    buttonText = _chat.ButtonText,
+                    icon = _chat.Icon,
+                    maxLength = _chat.MaxLength,
+                    suggestions = _chat.Suggestions
+                });
+
             var script =
                 "<script>" +
                 "window.Tech = window.Tech || {};" +
                 "Tech.GridOptions = Tech.GridOptions || {};" +
-                $"Tech.GridOptions[{nameJson}] = {{ columns: {columnsJson}, toolbar: {toolbarJson} }};" +
+                $"Tech.GridOptions[{nameJson}] = {{ columns: {columnsJson}, toolbar: {toolbarJson}, chat: {chatJson} }};" +
                 "</script>";
 
             writer.Write(stringWriter.ToString());
             writer.Write(script);
+        }
+
+        private static TagBuilder BuildChatButton(GridChatOptions chat)
+        {
+            var button = new TagBuilder("button");
+
+            button.Attributes["type"] = "button";
+            button.AddCssClass("btn btn-sm btn-primary tech-toolbar-btn tech-grid-chat-toggle ms-auto");
+            button.Attributes["data-action"] = "chat";
+            button.Attributes["aria-haspopup"] = "dialog";
+            button.Attributes["aria-expanded"] = "false";
+
+            var icon = new TagBuilder("i");
+            icon.AddCssClass($"bi bi-{chat.Icon} me-1");
+            button.InnerHtml.AppendHtml(icon);
+            button.InnerHtml.Append(chat.ButtonText);
+
+            return button;
         }
 
         private static TagBuilder BuildToolbarButton(GridToolbarItem item)

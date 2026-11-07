@@ -1,9 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using System.Diagnostics;
+using TechUI.Mvc.Chat;
 using TechUI.Mvc.Grid;
 using TechUI.Mvc.Infrastructure;
 using TechUI.SampleMvc.Models;
+using TechUI.SampleMvc.Services;
+using TechUI.Samples.Shared;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace TechUI.SampleMvc.Controllers;
@@ -30,13 +33,19 @@ public class HomeController : Controller
 
     private readonly ILogger<HomeController> _logger;
     private readonly IWebHostEnvironment _environment;
+    private readonly SupportChatStore _supportChat;
+    private readonly DeepSeekAssistant _deepSeek;
 
     public HomeController(
         ILogger<HomeController> logger,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        SupportChatStore supportChat,
+        DeepSeekAssistant deepSeek)
     {
         _logger = logger;
         _environment = environment;
+        _supportChat = supportChat;
+        _deepSeek = deepSeek;
     }
 
     public IActionResult Index()
@@ -78,6 +87,13 @@ public class HomeController : Controller
                 nameof(UserViewModel.IsActive)
             }));
     }
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult GridChat([FromBody] TechGridChatRequest request)
+    {
+        return Json(GridChatParser.Parse(request));
+    }
+
     public IActionResult Privacy()
     {
         return View();
@@ -463,6 +479,87 @@ public class HomeController : Controller
     public IActionResult Breadcrumb()
     {
         return View();
+    }
+
+    [HttpGet]
+    public IActionResult Chat()
+    {
+        ViewBag.DeepSeekConfigured = _deepSeek.IsConfigured;
+        ViewBag.DeepSeekModel = _deepSeek.Model;
+
+        return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChatAssistant(
+        [FromBody] TechChatRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Message))
+        {
+            return BadRequest();
+        }
+
+        var answer = await _deepSeek.ReplyAsync(request, cancellationToken);
+
+        if (answer.Success)
+        {
+            return Json(new TechChatResponse
+            {
+                Reply = answer.Reply,
+                Sender = $"DeepSeek · {_deepSeek.Model}"
+            });
+        }
+
+        var reply = LocalAssistant.Reply(request);
+
+        if (_deepSeek.IsConfigured)
+        {
+            var error = answer.Error ?? "unknown error";
+
+            if (error.Length > 160)
+            {
+                error = error[..160] + "…";
+            }
+
+            reply += "\n\n(اتصال به DeepSeek برقرار نشد: " + error +
+                " — پاسخ محلی نمایش داده شد.)";
+        }
+
+        return Json(new TechChatResponse
+        {
+            Reply = reply,
+            Sender = _deepSeek.IsConfigured ? "دستیار محلی · خطای DeepSeek" : "دستیار محلی"
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult ChatSupport([FromBody] TechChatRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Message))
+        {
+            return BadRequest();
+        }
+
+        var messageId = _supportChat.AddUserMessage(
+            request.ConversationId ?? string.Empty,
+            request.Message.Trim());
+
+        return Json(new TechChatResponse
+        {
+            Delivered = true,
+            MessageId = messageId,
+            Typing = true
+        });
+    }
+
+    [HttpGet]
+    public IActionResult ChatSupportPoll(string? conversation, long after)
+    {
+        return Json(_supportChat.Poll(
+            conversation ?? string.Empty, after));
     }
 
     [HttpPost]

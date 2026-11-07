@@ -1,0 +1,185 @@
+@using TechUI.Mvc.Chat
+@{
+    ViewData["Title"] = "Chat";
+
+    var deepSeekOn = ViewBag.DeepSeekConfigured == true;
+    var deepSeekModel = (string?)ViewBag.DeepSeekModel ?? "deepseek-chat";
+}
+
+<h1>چت مستقل: دستیار هوش مصنوعی و پشتیبانی انسانی</h1>
+<p class="text-muted">
+    یک کامپوننت چت با دو حالت. حالت <code>Assistant</code> هر پیام را به یک
+    endpoint می‌فرستد و پاسخ را همان‌جا نشان می‌دهد (مناسب اتصال به LLM).
+    حالت <code>Support</code> پیام را به صندوق کارشناس تحویل می‌دهد و پاسخ‌ها را
+    با polling (یا فراخوانی <code>receive</code> از SignalR) دریافت می‌کند.
+    همهٔ رنگ‌ها از توکن‌های <code>--tech-*</code> می‌آیند؛ قالب رنگی و تم تاریک
+    بالای صفحه را عوض کنید تا اثر آن را ببینید.
+</p>
+
+@Html.AntiForgeryToken()
+
+<div class="row g-4" dir="rtl" lang="fa">
+
+    <div class="col-12 col-xl-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-1">دستیار هوش مصنوعی</h2>
+                @if (deepSeekOn)
+                {
+                    <p class="text-muted small mb-3">
+                        <span class="badge text-bg-success">DeepSeek فعال</span>
+                        پاسخ‌ها از مدل <code>@deepSeekModel</code> می‌آید. اگر سرویس در
+                        دسترس نباشد، پاسخ محلی جایگزین می‌شود.
+                    </p>
+                }
+                else
+                {
+                    <p class="text-muted small mb-3">
+                        <span class="badge text-bg-secondary">حالت محلی</span>
+                        برای اتصال DeepSeek، کلید را در <code>DeepSeek:ApiKey</code>
+                        (user-secrets) یا متغیر محیطی <code>DEEPSEEK_API_KEY</code>
+                        بگذارید و برنامه را دوباره اجرا کنید.
+                    </p>
+                }
+
+                @(Html.Tech().Chat("assistantChat")
+                    .Mode(TechChatMode.Assistant)
+                    .Url(Url.Action("ChatAssistant", "Home")!)
+                    .Title("دستیار TechUI")
+                    .Subtitle(deepSeekOn
+                        ? "DeepSeek · " + deepSeekModel
+                        : "پاسخ محلی · بدون کلید API")
+                    .Welcome("سلام! من دستیار نمایشی این صفحه هستم. دربارهٔ قیمت، سفارش، مرجوعی یا ساعات کاری بپرسید.")
+                    .Placeholder("سؤال خود را بنویسید…")
+                    .Height(520)
+                    .Suggestions(
+                        "قیمت محصولات چطور محاسبه می‌شود؟",
+                        "سفارشم را چطور پیگیری کنم؟",
+                        "شرایط مرجوعی چیست؟",
+                        "با کارشناس انسانی صحبت کنم")
+                    .OnSend("chatOnSend")
+                    .OnReceive("chatOnReceive"))
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-1">پشتیبانی آنلاین</h2>
+                <p class="text-muted small mb-3">
+                    پیام در صندوق کارشناس ذخیره می‌شود؛ پاسخ پس از حدود دو ثانیه با
+                    polling می‌رسد. می‌توانید با دکمهٔ پایین صفحه پیام کارشناس را
+                    دستی هم بفرستید.
+                </p>
+
+                @(Html.Tech().Chat("supportChat")
+                    .Mode(TechChatMode.Support)
+                    .Url(Url.Action("ChatSupport", "Home")!)
+                    .PollUrl(Url.Action("ChatSupportPoll", "Home")!)
+                    .PollInterval(2)
+                    .Title("پشتیبانی فروشگاه")
+                    .Subtitle("کارشناس آنلاین · میانگین پاسخ ۲ دقیقه")
+                    .Welcome("سلام! پیام خود را بنویسید؛ کارشناس پشتیبانی به‌زودی پاسخ می‌دهد.")
+                    .Placeholder("مثلاً: کد رهگیری سفارش ۱۰۲۴ را می‌خواهم")
+                    .Height(520)
+                    .MaxLength(1500)
+                    .Suggestions(
+                        "پیگیری سفارش",
+                        "مرجوعی و تعویض",
+                        "ساعات کاری پشتیبانی")
+                    .OnSend("chatOnSend")
+                    .OnReceive("chatOnReceive"))
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <h2 class="h6 mb-0">رویدادهای چت</h2>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" id="agentPush" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-person-plus me-1"></i>
+                            پیام آزمایشی از کارشناس
+                        </button>
+                        <button type="button" id="resetChats" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>
+                            پاک‌کردن گفتگوها
+                        </button>
+                    </div>
+                </div>
+                <div id="chatEventLog" class="d-flex flex-column gap-1" aria-live="polite">
+                    <span class="small text-muted">هنوز رویدادی ثبت نشده است.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+
+            const log = document.getElementById('chatEventLog');
+
+            function write(text) {
+
+                if (!log) return;
+
+                if (log.children.length === 1 &&
+                    log.firstElementChild.tagName === 'SPAN') {
+                    log.innerHTML = '';
+                }
+
+                const item = document.createElement('div');
+                item.className = 'small text-muted';
+                item.textContent = new Date().toLocaleTimeString('fa-IR') + ' — ' + text;
+                log.prepend(item);
+
+                while (log.children.length > 6) {
+                    log.lastElementChild.remove();
+                }
+            }
+
+            window.chatOnSend = function (payload) {
+                write('ارسال شد: ' + payload.message);
+            };
+
+            window.chatOnReceive = function (payload) {
+                write('دریافت (' + payload.role + '): ' + payload.content.slice(0, 70));
+            };
+
+            document.getElementById('agentPush')
+                .addEventListener('click', function () {
+
+                    const chat = Tech.Chat.get('supportChat');
+
+                    if (!chat) return;
+
+                    chat.receive({
+                        role: 'agent',
+                        sender: 'علی · کارشناس دوم',
+                        content: 'سلام! من هم سفارش را بررسی کردم؛ کد رهگیری را بفرستید تا وضعیت مرسوله را دقیق بگویم.'
+                    });
+
+                    write('پیام دستی کارشناس به پنل پشتیبانی اضافه شد.');
+                });
+
+            document.getElementById('resetChats')
+                .addEventListener('click', function () {
+
+                    ['assistantChat', 'supportChat'].forEach(function (id) {
+
+                        const chat = Tech.Chat.get(id);
+
+                        if (chat) chat.clear();
+                    });
+
+                    write('هر دو گفتگو پاک شد.');
+                });
+        })();
+    </script>
+}

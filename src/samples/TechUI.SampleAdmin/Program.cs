@@ -4,6 +4,10 @@ using TechUI.SampleAdmin.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Serve referenced-project static assets (_content/...) in every environment,
+// not only Development, so the sample also runs from the build output.
+builder.WebHost.UseStaticWebAssets();
+
 Directory.CreateDirectory(Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
 
 builder.Services.AddControllersWithViews();

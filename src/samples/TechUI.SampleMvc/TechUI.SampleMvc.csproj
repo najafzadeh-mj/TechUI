@@ -4,11 +4,16 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>techui-samplemvc-deepseek</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\TechUI.Mvc\TechUI.Mvc.csproj" />
     <ProjectReference Include="..\..\TechUI.Mvc.EntityFrameworkCore\TechUI.Mvc.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\GridChatParser.cs" Link="Services\GridChatParser.cs" />
   </ItemGroup>
 
 </Project>

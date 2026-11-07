@@ -11,6 +11,10 @@ TagHelpers, and Persian-first defaults.
 - Grid, DropDownList, MultiSelect/Tag Input, inputs, editor, tabs, accordion,
   tree view, dropdown tree, wizard/stepper, timeline, breadcrumb, file upload,
   spinner, toast, dialog and dependency-free SVG charts (23 chart types).
+- Standalone Chat panel with assistant (single request/reply) and support
+  (deliver + poll or realtime push) modes; styled by the active theme tokens.
+- Optional Grid assistant chat panel with a provider-agnostic request/response
+  contract; bring your own endpoint or model, TechUI ships no AI dependency.
 
 ## Requirements
 
@@ -202,6 +206,34 @@ Server-rendered `nav > ol` breadcrumb with linked items, icons, `aria-current`
 on the last item, optional custom separator and compact spacing. The separator
 flips automatically for RTL and colors follow the active theme. No JavaScript
 required.
+
+## Chat
+
+```razor
+@using TechUI.Mvc.Chat
+
+@Html.AntiForgeryToken()
+
+@(Html.Tech().Chat("assistantChat")
+    .Mode(TechChatMode.Assistant)
+    .Url(Url.Action("ChatAssistant", "Home")!)
+    .Title("Assistant")
+    .Welcome("How can I help?")
+    .Suggestions("Track my order", "Return policy"))
+```
+
+The endpoint receives `TechChatRequest` as JSON and returns
+`TechChatResponse` with `reply`. With `Mode(TechChatMode.Support)` the same
+POST delivers the message to an inbox and agent replies arrive from `PollUrl`
+(`?conversation=…&after=<lastId>`) or from
+`Tech.Chat.get('assistantChat').receive({ role: 'agent', content: '…' })`
+(e.g. SignalR). Polling pauses while the tab is hidden. All colors come from
+the theme tokens, so presets and dark mode restyle the panel automatically.
+
+The gallery sample connects its assistant to DeepSeek's OpenAI-compatible
+endpoint when `DeepSeek:ApiKey` (user-secrets) or `DEEPSEEK_API_KEY` is set,
+and falls back to a local responder otherwise. See
+`src/samples/TechUI.SampleMvc/Services/DeepSeekAssistant.cs`.
 
 ## Theme and RTL
 

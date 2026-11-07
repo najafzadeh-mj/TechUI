@@ -83,6 +83,9 @@
                             <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Breadcrumb">Breadcrumb</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Chat">Chat</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="DatePicker">DatePicker</a>
                         </li>
                         <li class="nav-item">
@@ -141,9 +144,7 @@
     </footer>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/_content/TechUI.Mvc/js/techui.js"></script>
-    @await RenderSectionAsync("Scripts", required: false)
     <script>
         Tech.addTemplateHelper('currency', value => {
             return new Intl.NumberFormat('fa-IR').format(value) + ' ریال';
@@ -199,6 +200,8 @@
             }
         })();
     </script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
 
 </body>
 </html>

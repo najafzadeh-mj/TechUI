@@ -6,6 +6,7 @@ using TechUI.Mvc.Infrastructure;
 using TechUI.SampleAdmin.Data;
 using TechUI.SampleAdmin.Models;
 using TechUI.SampleAdmin.Services;
+using TechUI.Samples.Shared;
 using TechUI.SampleAdmin.ViewModels;
 
 namespace TechUI.SampleAdmin.Controllers;
@@ -192,6 +193,13 @@ public sealed class AdminController : Controller
         var query = _db.Customers.AsNoTracking();
 
         return Json(await query.ToTechGridResultAsync(request, CustomerFields));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult GridChat([FromBody] TechGridChatRequest request)
+    {
+        return Json(GridChatParser.Parse(request));
     }
 
     [HttpGet]

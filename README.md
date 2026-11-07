@@ -134,7 +134,14 @@ the library is a GET endpoint called with `?type=image|file`.
 Grid, DropDownList, TextBox, TextArea, NumericTextBox, MaskedTextBox, Editor,
 CheckBox, RadioButton, DatePicker, DateRangePicker, TimePicker, MultiSelect /
 Tag Input, Tabs, Accordion, TreeView, DropDownTree, FileUpload, Wizard / Stepper,
-Timeline, Breadcrumb, Chart (23 types), Spinner, Toast and Dialog.
+Timeline, Breadcrumb, Chat, Chart (23 types), Spinner, Toast and Dialog. The
+standalone Chat panel works as an AI assistant or a human support inbox, and the
+Grid also offers an optional assistant chat panel backed by your own endpoint —
+TechUI ships no AI dependency; see
+[Grid Chat](docs/components.md#چت-دستیار-grid-chat). The gallery sample wires its
+AI chat to DeepSeek's OpenAI-compatible API when `DEEPSEEK_API_KEY` (or
+`DeepSeek:ApiKey`) is set and falls back to a local responder otherwise; see
+[Chat](docs/components.md#chat).
 
 Full fluent API and JavaScript API reference:
 [docs/components.md](docs/components.md).

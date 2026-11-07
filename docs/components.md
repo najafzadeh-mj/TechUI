@@ -23,6 +23,7 @@
 - [Wizard / Stepper](#wizard--stepper)
 - [Timeline](#timeline)
 - [Breadcrumb](#breadcrumb)
+- [Chat](#chat)
 - [Chart](#chart)
 - [Spinner](#spinner)
 - [Toast / Notification](#toast--notification)
@@ -150,6 +151,7 @@ DataAnnotations را به‌صورت خودکار اعمال می‌کنند.
 | `DataSource(Action<GridDataSourceBuilder>)` | `Read(action, controller, area?)`, `Url(url)`, `Data(functionName)`, `Type(TechHttpMethod)` |
 | `Events(Action<GridEventBuilder>)` | `DataBinding`, `DataBound`, `Change`, `Error` |
 | `Toolbar(Action<GridToolbarBuilder>)` | `Create(text?, handler?, icon?)`, `Refresh(text?, icon?)`, `Custom(text, handler, icon?)`, `ColumnChooser(text?, icon?)` |
+| `Chat(Action<GridChatBuilder>)` | پنل چت دستیار؛ `Url(url)`, `Title`, `Placeholder`, `Welcome`, `ButtonText`, `Icon`, `MaxLength`, `Suggestions(...)` |
 | `Columns(Action<GridColumnFactory<TModel>>)` | `Bound(expression)` و `Template(string)` |
 
 `GridColumnBuilder`: `Title`, `Width`, `Sortable`, `Filterable`.
@@ -191,7 +193,7 @@ grid.clearSelection();
 grid.setFilter('FullName', 'علی');         // فقط state را تغییر می‌دهد
 grid.clearFilters();
 await grid.refresh();                      // برای اعمال فیلترها
-grid.state();                              // { page, pageSize, sorts, filters }
+grid.state();                              // { page, pageSize, sorts, filters, highlight }
 ```
 
 `setFilter` و `clearFilters` درخواستی ارسال نمی‌کنند؛ بعد از آن‌ها
@@ -205,6 +207,169 @@ grid.state();                              // { page, pageSize, sorts, filters }
 
 عنصر گرید هم `element.techGrid` را در اختیار می‌گذارد. رخدادها با `sender`
 (نمونه‌ی گرید) ارسال می‌شوند؛ `DataBound` مقدار `data` را هم دارد.
+
+### چت دستیار (Grid Chat)
+
+مانند `AddGridChatTools` در Telerik، یک دکمه و پنل چت داخل نوار ابزار گرید
+قرار می‌گیرد؛ اما TechUI هیچ وابستگی به سرویس یا SDK هوش مصنوعی ندارد.
+هر پیام به یک endpoint دلخواه شما ارسال می‌شود و پاسخ، متن و مجموعه‌ای از
+دستورهای امن برای تغییر state گرید است.
+
+```razor
+@(Html.Tech().Grid<Customer>()
+    .Name("customersGrid")
+    .DataSource(ds => ds.Read("CustomerGrid", "Admin").Type(TechHttpMethod.Post))
+    .Pageable().Sortable().Filterable()
+    .Chat(c => c
+        .Url(Url.Action("GridChat", "Admin")!)
+        .Title("دستیار مشتریان")
+        .ButtonText("دستیار")
+        .Placeholder("مثلاً: شهر تهران را فیلتر کن")
+        .Welcome("سلام! دربارهٔ این جدول بپرسید.")
+        .Suggestions(
+            "فیلتر شهر تهران",
+            "مرتب‌سازی بر اساس نام صعودی",
+            "صفحه بعد"))
+    .Columns(c => { /* ... */ }))
+```
+
+| متد | پیش‌فرض | توضیح |
+| --- | --- | --- |
+| `Url(string)` | — | آدرس endpoint چت (الزامی) |
+| `Title(string)` | «دستیار گرید» | عنوان پنل |
+| `Placeholder(string)` | «دستور خود را بنویسید…» | متن راهنمای ورودی |
+| `Welcome(string)` | — | پیام خوش‌آمد قبل از اولین دستور |
+| `ButtonText(string)` | «دستیار» | متن دکمهٔ نوار ابزار |
+| `Icon(string)` | `chat-dots` | آیکون Bootstrap Icons |
+| `MaxLength(int)` | `500` | حداکثر طول پیام (۱ تا ۴۰۰۰) |
+| `Suggestions(params string[])` | — | دستورهای پیشنهادی به‌صورت چیپ |
+
+اگر گرید با `GET` داده می‌خواند و چت فعال است، توکن ضدجعل همچنان روی ریشهٔ
+گرید رندر می‌شود؛ کلاینت آن را در هدر `RequestVerificationToken` می‌فرستد.
+endpoint را با `[HttpPost]` و `[ValidateAntiForgeryToken]` محافظت کنید:
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+public IActionResult GridChat([FromBody] TechGridChatRequest request)
+{
+    return Json(GridChatParser.Parse(request));   // یا فراخوانی مدل/سرویس شما
+}
+```
+
+#### قرارداد درخواست
+
+```json
+{
+  "message": "شهر تهران را فیلتر کن",
+  "history": [
+    { "role": "user", "content": "..." },
+    { "role": "assistant", "content": "..." }
+  ],
+  "grid": {
+    "id": "customersGrid",
+    "total": 42,
+    "columns": [
+      {
+        "field": "City",
+        "title": "شهر",
+        "dataType": "string",
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    ],
+    "state": {
+      "page": 1,
+      "pageSize": 20,
+      "sorts": [{ "field": "FullName", "dir": "asc" }],
+      "filter": {
+        "logic": "and",
+        "filters": [{ "field": "City", "operator": "contains", "value": "تهران" }]
+      }
+    }
+  }
+}
+```
+
+مدل‌های آماده: `TechGridChatRequest`, `TechGridChatMessage`,
+`TechGridChatGrid`, `TechGridChatColumn`, `TechGridChatState`. `history`
+حداکثر ۱۲ نوبت اخیر را دارد. اگر endpoint شما به مدل زبانی وصل است،
+`TechGridChatTools.BuildSystemPrompt(request.Grid, "مشتریان")` توضیح ستون‌ها
+و قرارداد خروجی را به‌صورت آماده می‌سازد؛ پاسخ مدل را به
+`TechGridChatResponse` نگاشت و برگردانید. `AllowedOperators` و
+`AllowedActionTypes` هم برای اعتبارسنجی در دسترس‌اند.
+
+#### قرارداد پاسخ
+
+```json
+{
+  "reply": "ستون «شهر» شامل «تهران» فیلتر شد.",
+  "actions": [
+    { "type": "filter", "field": "City", "operator": "contains", "value": "تهران" }
+  ]
+}
+```
+
+| `type` | پارامترها | رفتار |
+| --- | --- | --- |
+| `filter` | `field`, `operator`, `value` | جایگزینی فیلتر همان ستون، بازگشت به صفحهٔ ۱ و بارگذاری مجدد |
+| `clearFilters` | — | حذف همهٔ فیلترها و بارگذاری مجدد |
+| `sort` | `field`, `dir` (`asc`/`desc`) | مرتب‌سازی تک‌ستونه |
+| `clearSorts` | — | حذف مرتب‌سازی‌ها |
+| `page` | `page` | رفتن به صفحه؛ محدود به تعداد صفحات |
+| `pageSize` | `pageSize` | اندازهٔ صفحه (۱ تا ۱۰۰۰) و بازگشت به صفحهٔ ۱ |
+| `hideColumns` / `showColumns` | `fields[]` | مخفی/نمایان کردن ستون‌ها (حداقل یک ستون نمایان می‌ماند) |
+| `showAllColumns` | — | نمایش همهٔ ستون‌ها |
+| `select` | `field`, `value` | انتخاب ردیف منطبق در صفحهٔ جاری و رخداد `Change` |
+| `highlight` | `field?`, `value` | هایلایت ردیف‌های منطبق؛ بدون `field` همهٔ ستون‌های نمایان بررسی می‌شوند |
+| `clearHighlight` | — | پاک کردن هایلایت |
+| `refresh` | — | بارگذاری مجدد |
+
+کلاینت حداکثر ۲۰ دستور را اعمال می‌کند و هر دستور را در برابر متادیتای گرید
+اعتبارسنجی می‌کند: فقط ستون‌های موجود، ستون‌های `sortable`/`filterable`،
+عملگرهای مجاز و `pageSize` در بازهٔ ۱ تا ۱۰۰۰. مقدارها همیشه به‌صورت متن
+مقایسه می‌شوند. این دستورها فقط UI را تغییر می‌دهند و هیچ عملیات داده‌ای
+تخریبی در قرارداد وجود ندارد؛ با این حال endpoint را احراز هویت/مجوز دهید و
+خروجی مدل را نامعتبر فرض کنید.
+
+#### API سمت کلاینت
+
+```js
+const grid = Tech.Grid.get('usersGrid');
+
+grid.chat.open();
+grid.chat.close();
+grid.chat.toggle();
+grid.chat.isOpen();
+grid.chat.send('صفحه بعد');          // Promise
+grid.chat.messages();                 // [{ role, content }]
+
+grid.setSort('FullName', 'desc');     // فقط state
+grid.setSorts([{ field: 'City', dir: 'asc' }]);
+grid.clearSorts();
+grid.setPage(2);
+grid.setPageSize(50);
+grid.setColumnVisible('Email', false); // رندر فوری
+grid.showAllColumns();
+grid.highlight('City', 'تهران');       // رندر فوری
+grid.clearHighlight();
+grid.selectBy('Email', 'a@b.com');     // انتخاب از صفحهٔ جاری
+grid.state();                          // { page, pageSize, sorts, filters, highlight }
+```
+
+مثل `setFilter`، متدهای `setSort`/`setSorts`/`clearSorts`/`setPage`/
+`setPageSize` درخواستی نمی‌فرستند؛ بعد از آن‌ها `refresh()` را صدا بزنید.
+`selectBy` در صورت پیدا نشدن مقدار در صفحهٔ جاری کاری انجام نمی‌دهد.
+
+در هر دو نمونه، پارسر مشترک
+[`src/samples/Shared/GridChatParser.cs`](../src/samples/Shared/GridChatParser.cs)
+استفاده می‌شود: یک پارسر محلی فارسی بدون کلید و بدون شبکه که دستورهایی مثل
+«فیلتر شهر تهران»، «مرتب‌سازی بر اساس نام صعودی»، «صفحه بعد»،
+«ستون ایمیل را مخفی کن» و «شهر تهران را هایلایت کن» را به
+`TechGridChatResponse` تبدیل می‌کند. صفحهٔ مشتریان در `TechUI.SampleAdmin` و
+صفحهٔ اصلی `TechUI.SampleMvc` (گرید `usersGrid`) هر دو به آن متصل‌اند. برای
+اتصال واقعی به مدل زبانی فقط همان endpoint را جایگزین کنید.
 
 ---
 
@@ -1133,6 +1298,196 @@ Tech.Wizard.goTo('checkoutWizard', 0); // میان‌بر
 - رنگ‌ها از توکن‌های تم می‌آیند، پس در تم تاریک و قالب‌های رنگی بدون تنظیم
   اضافی درست نمایش داده می‌شود.
 
+## Chat
+
+پنل گفتگوی مستقل با دو حالت:
+
+- **`TechChatMode.Assistant`** — هر پیام به `Url` ارسال می‌شود و پاسخ در همان
+  درخواست برمی‌گردد (`Reply`). مناسب اتصال به LLM یا ربات FAQ.
+- **`TechChatMode.Support`** — پیام به صندوق کارشناس تحویل داده می‌شود و
+  پاسخ‌ها با `PollUrl` دریافت می‌شوند؛ یا با
+  `Tech.Chat.get(id).receive(...)` از SignalR/WebSocket به‌صورت realtime
+  تزریق می‌شوند.
+
+```razor
+@using TechUI.Mvc.Chat
+
+@Html.AntiForgeryToken()
+
+@(Html.Tech().Chat("supportChat")
+    .Mode(TechChatMode.Support)
+    .Url(Url.Action("ChatSupport", "Home")!)
+    .PollUrl(Url.Action("ChatSupportPoll", "Home")!)
+    .PollInterval(3)
+    .Title("پشتیبانی فروشگاه")
+    .Subtitle("کارشناس آنلاین")
+    .Welcome("سلام! پیام خود را بنویسید.")
+    .Placeholder("متن پیام…")
+    .Height(520)
+    .Suggestions("پیگیری سفارش", "مرجوعی و تعویض"))
+```
+
+### گزینه‌ها
+
+| متد | پیش‌فرض | توضیح |
+| --- | --- | --- |
+| `Chat(string? id)` | — | شناسهٔ ریشه (اختیاری) |
+| `Mode(TechChatMode)` | `Assistant` | حالت گفتگو |
+| `Url(string)` | — | endpoint دریافت پیام (الزامی) |
+| `PollUrl(string)` | — | endpoint GET برای دریافت پاسخ کارشناس |
+| `PollInterval(int)` | `4` | فاصلهٔ polling به ثانیه (۲ تا ۱۲۰) |
+| `Title` / `Subtitle` | وابسته به حالت | عنوان و زیرعنوان هدر |
+| `Welcome` / `Placeholder` | وابسته به حالت | متن خوش‌آمد و placeholder |
+| `Icon(string)` | `stars` یا `headset` | آیکن اواتار بدون پیشوند `bi-` |
+| `MaxLength(int)` | `1000` | حداکثر طول پیام (۱ تا ۴۰۰۰) |
+| `Height(int)` | `520` | ارتفاع پنل به پیکسل (۲۸۰ تا ۱۲۰۰) |
+| `Suggestions(params string[])` | — | پیشنهادهای شروع گفتگو |
+| `ClearButton(bool)` | `true` | نمایش دکمهٔ پاک‌کردن گفتگو |
+| `OnSend` / `OnReceive` / `OnClear` / `OnError` | — | نام تابع سراسری رویداد |
+| `CssClass` / `Attribute` / `Attributes` | — | استایل و ویژگی‌های اضافی روی ریشه |
+
+### قرارداد سرور
+
+پیام با `POST` به‌صورت JSON ارسال می‌شود (هدر `RequestVerificationToken`
+همراه است؛ پس `@Html.AntiForgeryToken()` را در صفحه بگذارید یا توکن را با
+`.Attribute("data-antiforgery", token)` بدهید):
+
+```json
+{
+  "message": "وضعیت سفارش ۱۰۲۴",
+  "conversationId": "8f5c…",
+  "sender": null,
+  "history": [ { "role": "user", "content": "سلام" } ]
+}
+```
+
+پاسخ حالت Assistant:
+
+```json
+{ "reply": "کد رهگیری را بفرستید…", "sender": "دستیار" }
+```
+
+در حالت Support، `POST` می‌تواند فقط تحویل را تأیید کند و پاسخ‌ها از
+`PollUrl?conversation=…&after=<lastId>` برگردند:
+
+```json
+{
+  "typing": true,
+  "messages": [
+    { "id": 12, "role": "agent", "sender": "مریم", "content": "سلام!" }
+  ]
+}
+```
+
+مدل‌های آماده: `TechChatRequest`، `TechChatMessage` و `TechChatResponse` در
+`TechUI.Mvc.Chat`. نمونهٔ اتصال به مدل واقعی:
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> ChatAssistant([FromBody] TechChatRequest request)
+{
+    var reply = await _ai.AskAsync(request.Message, request.History);
+
+    return Json(new TechChatResponse { Reply = reply, Sender = "دستیار" });
+}
+```
+
+### اتصال به DeepSeek (نمونهٔ کامل)
+
+نمونهٔ `TechUI.SampleMvc` اکشن `ChatAssistant` را به
+[DeepSeek](https://platform.deepseek.com) وصل می‌کند. حساب جدید اعتبار رایگان
+اولیه دارد و API آن با قرارداد OpenAI سازگار است
+(`POST https://api.deepseek.com/chat/completions`). پیاده‌سازی کامل در
+[`DeepSeekAssistant.cs`](../src/samples/TechUI.SampleMvc/Services/DeepSeekAssistant.cs)
+است.
+
+کلید را هرگز در سورس یا مخزن نگذارید. یکی از این دو روش:
+
+```bash
+dotnet user-secrets set "DeepSeek:ApiKey" "sk-..." --project src/samples/TechUI.SampleMvc
+
+# یا متغیر محیطی
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+| کلید تنظیمات | پیش‌فرض | توضیح |
+| --- | --- | --- |
+| `DeepSeek:ApiKey` | — | کلید API؛ در نبود آن `DEEPSEEK_API_KEY` خوانده می‌شود |
+| `DeepSeek:BaseUrl` | `https://api.deepseek.com` | آدرس پایه (بدون `/v1` هم کار می‌کند) |
+| `DeepSeek:Model` | `deepseek-chat` | یا `deepseek-reasoner` |
+| `DeepSeek:TimeoutSeconds` | `60` | مهلت درخواست (۵ تا ۱۲۰) |
+| `DeepSeek:MaxTokens` | `1024` | سقف توکن پاسخ |
+| `DeepSeek:SystemPrompt` | متن فارسی پیش‌فرض | دستور سیستمی دستیار |
+
+هستهٔ فراخوانی ساده است: تاریخچهٔ گفتگو (فقط پیام‌های `user` و `assistant`،
+حداکثر ۲۴ پیام) به‌همراه پیام جدید به `messages` اضافه می‌شود و پاسخ از
+`choices[0].message.content` خوانده می‌شود:
+
+```csharp
+var payload = new Dictionary<string, object?>
+{
+    ["model"] = options.Model,
+    ["messages"] = messages,   // system + history + user
+    ["stream"] = false,
+    ["temperature"] = 0.7,
+    ["max_tokens"] = options.MaxTokens
+};
+
+using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
+{
+    Content = JsonContent.Create(payload)
+};
+
+httpRequest.Headers.Authorization = new("Bearer", options.ApiKey);
+
+using var response = await http.SendAsync(httpRequest, cancellationToken);
+var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+var reply = JsonSerializer.Deserialize<CompletionResponse>(body, JsonOptions)
+    ?.Choices?.FirstOrDefault()?.Message?.Content;
+```
+
+بدون کلید، پاسخ‌دهندهٔ محلی (`LocalAssistant`) جواب می‌دهد و همان صفحهٔ نمونه
+با برچسب «حالت محلی» این وضعیت را نشان می‌دهد. اگر کلید تنظیم شده باشد ولی
+سرویس خطا بدهد (مثلاً `401` یا اتمام اعتبار)، خطا در لاگ ثبت می‌شود و پاسخ
+محلی با یادداشت کوتاهی از خطا به کاربر برمی‌گردد؛ بنابراین دمو هرگز قطع نمی‌شود.
+استریم استفاده نمی‌شود و نشانگر تایپ تا رسیدن پاسخ کامل نمایش داده می‌شود.
+
+### API کلاینت
+
+```js
+const chat = Tech.Chat.get('supportChat');
+
+chat.send('سلام');
+chat.receive({ role: 'agent', sender: 'مریم', content: 'در خدمتم' });
+chat.typing(true);
+chat.getMessages();
+chat.clear();
+chat.startPolling();
+chat.stopPolling();
+chat.focus();
+chat.destroy();
+```
+
+رویدادها با `.OnSend("handler")` و مانند آن ثبت می‌شوند و payloadها عبارت‌اند
+از `{ message }` برای `Send`، پیام نرمال‌شده برای `Receive`، `{}` برای `Clear`
+و `{ error }` برای `Error`.
+
+### نکته‌ها
+
+- `Enter` پیام را می‌فرستد و `Shift+Enter` خط جدید می‌سازد؛ textarea تا سقف
+  ۷rem رشد می‌کند.
+- polling فقط وقتی صفحه visible است اجرا می‌شود و با بازگشت تب ادامه می‌یابد.
+  برای حالت Support بدون `PollUrl`، پاسخ‌ها را با `receive` از SignalR بفرستید.
+- محتوای پیام‌ها به‌صورت متن خام و escape‌شده نمایش داده می‌شود (خطوط حفظ
+  می‌شوند)؛ Markdown رندر نمی‌شود.
+- همهٔ رنگ‌ها از توکن‌های `--tech-*` می‌آیند؛ قالب‌های رنگی، تم تاریک و RTL
+  بدون تنظیم اضافی روی حباب‌ها، هدر، اواتار و دکمهٔ ارسال اثر می‌گذارند.
+- کامپوننت جاوااسکریپت دارد و از `data-tech-component="chat"` boot می‌شود؛
+  برای HTML تزریقی بعد از لود، `Tech.boot()` را صدا بزنید. برای دسترسی با
+  `Tech.Chat.get` حتماً یک `id` به `Chat(...)` بدهید.
+
 ## Chart
 
 نمودار SVG بدون وابستگی؛ SVG کاملاً سمت کلاینت از `data-chart-options` ساخته
@@ -1549,6 +1904,13 @@ Helper سفارشی:
 Tech.addTemplateHelper('currency', value =>
     Number(value).toLocaleString('fa-IR') + ' تومان');
 ```
+
+این ثبت باید **بعد از بارگذاری `techui.js`** اجرا شود. اگر کد را داخل یک
+View می‌نویسید، آن را در بخش `Scripts` بگذارید (که پس از اسکریپت کتابخانه در
+Layout رندر می‌شود) یا در انتهای Layout بعد از تگ
+`<script src="~/_content/TechUI.Mvc/js/techui.js"></script>`. قرار دادن آن در
+اسکریپتی که زودتر از `techui.js` لود می‌شود (مثلاً `site.js`) خطای
+`Tech is not defined` می‌دهد.
 
 ---
 

@@ -60,6 +60,19 @@
             t.Custom("خروجی اکسل", "onExport", "download");
             t.ColumnChooser();
         })
+        .Chat(c => c
+            .Url(Url.Action("GridChat", "Home")!)
+            .Title("دستیار Grid")
+            .ButtonText("دستیار")
+            .Placeholder("مثلاً: فیلتر نام کامل User 001")
+            .Welcome("سلام! این صفحه نمونهٔ Grid است. دربارهٔ ستون‌های شناسه و نام کامل بپرسید.")
+            .Suggestions(
+                "تعداد کل را بگو",
+                "فیلتر نام کامل User 001",
+                "مرتب‌سازی بر اساس شناسه نزولی",
+                "صفحه بعد",
+                "ستون شناسه را مخفی کن",
+                "نام کامل User 002 را هایلایت کن"))
         .Columns(c =>
         {
             c.Bound(x => x.Id)

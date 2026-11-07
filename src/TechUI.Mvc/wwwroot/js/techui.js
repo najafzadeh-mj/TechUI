@@ -700,6 +700,8 @@ Tech.register('grid', function (el) {
 
     const toolbarItems = options.toolbar || [];
 
+    const chatOptions = options.chat || null;
+
     const state = {
         page: 1,
         pageSize: parseInt(el.dataset.pageSize || '10', 10) || 10,
@@ -739,6 +741,14 @@ Tech.register('grid', function (el) {
     let loading = false;
     let loadingStartedAt = 0;
     let pendingFocusField = null;
+
+    const chatState = {
+        open: false,
+        busy: false,
+        focusInput: false,
+        messages: [],
+        highlight: null
+    };
 
     // --------------------------------------------------------
     // Persisted state
@@ -1068,7 +1078,7 @@ Tech.register('grid', function (el) {
 
     function buildToolbarHtml() {
 
-        if (toolbarItems.length === 0) return '';
+        if (toolbarItems.length === 0 && !chatOptions) return '';
 
         let html =
             '<div class="tech-grid-toolbar d-flex align-items-center gap-2 p-2 border-bottom flex-wrap">';
@@ -1087,6 +1097,18 @@ Tech.register('grid', function (el) {
                 icon + Tech.escapeHtml(item.text || '') +
                 '</button>';
         });
+
+        if (chatOptions) {
+
+            html +=
+                '<button type="button" ' +
+                'class="btn btn-sm btn-primary tech-toolbar-btn tech-grid-chat-toggle ms-auto" ' +
+                'data-action="chat" aria-haspopup="dialog" ' +
+                `aria-expanded="${chatState.open ? 'true' : 'false'}">` +
+                `<i class="bi bi-${Tech.escapeHtml(chatOptions.icon || 'chat-dots')} me-1"></i>` +
+                Tech.escapeHtml(chatOptions.buttonText || 'دستیار') +
+                '</button>';
+        }
 
         return html + '</div>';
     }
@@ -1182,6 +1204,14 @@ Tech.register('grid', function (el) {
 
         let html = '<tbody>';
 
+        const highlight = chatState.highlight;
+
+        const highlightFields = highlight
+            ? (highlight.field
+                ? [highlight.field]
+                : visible.map(function (column) { return column.field; }))
+            : [];
+
         currentRows.forEach(function (row, rowIndex) {
 
             const selectedClass = rowIndex === state.selectedIndex
@@ -1192,11 +1222,18 @@ Tech.register('grid', function (el) {
                 ? ' tech-grid-row-selectable'
                 : '';
 
+            const highlightClass = highlight && highlight.value !== '' &&
+                highlightFields.some(function (field) {
+                    return sameCellValue(getValue(row, field), highlight.value);
+                })
+                ? ' tech-grid-row-highlight'
+                : '';
+
             const selectableAttrs = selectableEnabled
                 ? ` tabindex="0" aria-selected="${rowIndex === state.selectedIndex}"`
                 : '';
 
-            html += `<tr class="tech-grid-row${selectableClass}${selectedClass}" ` +
+            html += `<tr class="tech-grid-row${selectableClass}${selectedClass}${highlightClass}" ` +
                 `data-row-index="${rowIndex}"${selectableAttrs}>`;
 
             visible.forEach(function (column) {
@@ -1338,6 +1375,13 @@ Tech.register('grid', function (el) {
             buildPagerHtml();
 
         bindGridEvents();
+
+        if (chatPanel) {
+
+            el.appendChild(chatPanel);
+
+            syncChatPanel();
+        }
 
         if (pendingFocusField) {
 
@@ -1481,6 +1525,14 @@ Tech.register('grid', function (el) {
                 if (action === 'refresh') {
 
                     api.refresh();
+                    return;
+                }
+
+                if (action === 'chat') {
+
+                    ev.stopPropagation();
+
+                    toggleChat();
                     return;
                 }
 
@@ -1899,6 +1951,582 @@ Tech.register('grid', function (el) {
     }
 
     // --------------------------------------------------------
+    // Chat
+    // --------------------------------------------------------
+
+    const chatOperators = [
+        'contains', 'notcontains', 'startswith', 'endswith',
+        'eq', 'neq', 'gt', 'gte', 'lt', 'lte',
+        'in', 'notin', 'isnull', 'isnotnull'
+    ];
+
+    const chatPanel = chatOptions ? createChatPanel() : null;
+
+    function createChatPanel() {
+
+        const panel = document.createElement('div');
+
+        panel.className = 'tech-grid-chat';
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'false');
+        panel.setAttribute('aria-label', chatOptions.title || 'دستیار گرید');
+
+        const maxLength = parseInt(chatOptions.maxLength, 10) || 500;
+
+        panel.innerHTML =
+            '<div class="tech-grid-chat-header">' +
+            '<div class="tech-grid-chat-heading">' +
+            `<i class="bi bi-${Tech.escapeHtml(chatOptions.icon || 'chat-dots')}"></i>` +
+            `<span class="tech-grid-chat-title">${Tech.escapeHtml(chatOptions.title || 'دستیار گرید')}</span>` +
+            '</div>' +
+            '<button type="button" class="tech-grid-chat-close" aria-label="بستن دستیار">' +
+            '<i class="bi bi-x-lg"></i></button>' +
+            '</div>' +
+            '<div class="tech-grid-chat-messages" role="log" ' +
+            'aria-live="polite" aria-relevant="additions"></div>' +
+            '<div class="tech-grid-chat-footer">' +
+            `<textarea class="tech-grid-chat-input" rows="1" maxlength="${maxLength}" ` +
+            `placeholder="${Tech.escapeHtml(chatOptions.placeholder || '')}" ` +
+            'aria-label="پیام به دستیار"></textarea>' +
+            '<button type="button" class="tech-grid-chat-send" aria-label="ارسال">' +
+            '<i class="bi bi-send"></i></button>' +
+            '</div>';
+
+        panel.querySelector('.tech-grid-chat-close')
+            .addEventListener('click', function () {
+                setChatOpen(false);
+            });
+
+        panel.querySelector('.tech-grid-chat-send')
+            .addEventListener('click', function () {
+                sendChat(panel.querySelector('.tech-grid-chat-input').value);
+            });
+
+        panel.querySelector('.tech-grid-chat-input')
+            .addEventListener('keydown', function (ev) {
+
+                if (ev.key === 'Enter' && !ev.shiftKey) {
+
+                    ev.preventDefault();
+
+                    sendChat(this.value);
+                }
+            });
+
+        panel.querySelector('.tech-grid-chat-messages')
+            .addEventListener('click', function (ev) {
+
+                const chip = ev.target.closest('.tech-grid-chat-suggestion');
+
+                if (chip) sendChat(chip.dataset.text || '');
+            });
+
+        panel.addEventListener('keydown', function (ev) {
+
+            if (ev.key === 'Escape') {
+                setChatOpen(false);
+            }
+        });
+
+        return panel;
+    }
+
+    function setChatOpen(open) {
+
+        if (!chatOptions) return;
+
+        chatState.open = !!open;
+
+        if (chatState.open) chatState.focusInput = true;
+
+        if (chatPanel) el.appendChild(chatPanel);
+
+        syncChatPanel();
+    }
+
+    function toggleChat() {
+
+        setChatOpen(!chatState.open);
+    }
+
+    function syncChatPanel() {
+
+        if (!chatPanel) return;
+
+        chatPanel.classList.toggle('show', chatState.open);
+
+        el.querySelectorAll('.tech-grid-chat-toggle').forEach(function (button) {
+            button.setAttribute('aria-expanded', chatState.open ? 'true' : 'false');
+        });
+
+        if (chatState.open && chatState.focusInput) {
+
+            chatState.focusInput = false;
+
+            const input = chatPanel.querySelector('.tech-grid-chat-input');
+
+            if (input) input.focus();
+        }
+
+        const send = chatPanel.querySelector('.tech-grid-chat-send');
+
+        if (send) send.disabled = chatState.busy;
+    }
+
+    function chatMessageHtml(message) {
+
+        const role = message.role === 'user' || message.role === 'assistant'
+            ? message.role
+            : 'error';
+
+        return '<div class="tech-grid-chat-message tech-grid-chat-message-' + role + '">' +
+            '<div class="tech-grid-chat-bubble">' + Tech.escapeHtml(message.content) + '</div>' +
+            '</div>';
+    }
+
+    function renderChatMessages() {
+
+        if (!chatPanel) return;
+
+        const container = chatPanel.querySelector('.tech-grid-chat-messages');
+
+        if (!container) return;
+
+        let html = '';
+
+        if (chatState.messages.length === 0) {
+
+            if (chatOptions.welcome) {
+
+                html += '<div class="tech-grid-chat-welcome">' +
+                    Tech.escapeHtml(chatOptions.welcome) +
+                    '</div>';
+            }
+
+            if (Array.isArray(chatOptions.suggestions) &&
+                chatOptions.suggestions.length > 0) {
+
+                html += '<div class="tech-grid-chat-suggestions">' +
+                    chatOptions.suggestions.map(function (suggestion) {
+                        return '<button type="button" class="tech-grid-chat-suggestion" ' +
+                            `data-text="${Tech.escapeHtml(suggestion)}">` +
+                            Tech.escapeHtml(suggestion) +
+                            '</button>';
+                    }).join('') +
+                    '</div>';
+            }
+        }
+
+        chatState.messages.forEach(function (message) {
+            html += chatMessageHtml(message);
+        });
+
+        if (chatState.busy) {
+
+            html += '<div class="tech-grid-chat-message tech-grid-chat-message-assistant">' +
+                '<div class="tech-grid-chat-bubble tech-grid-chat-typing">' +
+                '<span></span><span></span><span></span>' +
+                '</div></div>';
+        }
+
+        container.innerHTML = html;
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function buildChatGrid() {
+
+        const snapshot = api.state();
+
+        return {
+            id: el.id,
+            total: lastResult.total,
+            columns: columns.map(function (column) {
+
+                return {
+                    field: column.field,
+                    title: column.title,
+                    dataType: column.dataType,
+                    sortable: !!column.field && sortableEnabled && column.sortable,
+                    filterable: !!column.field && filterableEnabled && column.filterable,
+                    hidden: !!column.hidden
+                };
+            }),
+            state: {
+                page: snapshot.page,
+                pageSize: snapshot.pageSize,
+                sorts: snapshot.sorts,
+                filter: {
+                    logic: 'and',
+                    filters: snapshot.filters
+                }
+            }
+        };
+    }
+
+    async function postChat(body) {
+
+        const headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json; charset=UTF-8'
+        };
+
+        const token = Tech.getAntiforgeryToken(el);
+
+        if (token) headers['RequestVerificationToken'] = token;
+
+        const response = await fetch(chatOptions.url, {
+            method: 'POST',
+            headers: headers,
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
+        }
+
+        return response.json();
+    }
+
+    async function sendChat(raw) {
+
+        const message = String(raw || '').trim();
+
+        if (!chatOptions || !message || chatState.busy) return;
+
+        const history = chatState.messages
+            .filter(function (item) {
+                return item.role === 'user' || item.role === 'assistant';
+            })
+            .slice(-12)
+            .map(function (item) {
+                return { role: item.role, content: item.content };
+            });
+
+        const input = chatPanel.querySelector('.tech-grid-chat-input');
+
+        if (input) input.value = '';
+
+        chatState.messages.push({ role: 'user', content: message });
+        chatState.busy = true;
+        chatState.open = true;
+
+        renderChatMessages();
+        syncChatPanel();
+
+        try {
+
+            const data = await postChat({
+                message: message,
+                history: history,
+                grid: buildChatGrid()
+            });
+
+            const reply = data && (data.reply ?? data.Reply);
+
+            const actions = data && (data.actions ?? data.Actions);
+
+            chatState.messages.push({
+                role: 'assistant',
+                content: typeof reply === 'string' && reply.trim()
+                    ? reply.trim()
+                    : 'انجام شد.'
+            });
+
+            await applyChatActions(actions);
+        }
+        catch (err) {
+
+            console.error('TechUI Grid chat error:', err);
+
+            chatState.messages.push({
+                role: 'error',
+                content: 'ارتباط با دستیار برقرار نشد. دوباره تلاش کنید.'
+            });
+
+            triggerGridEvent('ChatError', { sender: api, error: err });
+        }
+        finally {
+
+            chatState.busy = false;
+            chatState.focusInput = true;
+
+            renderChatMessages();
+            syncChatPanel();
+        }
+    }
+
+    function chatColumn(field) {
+
+        if (!field) return null;
+
+        return columns.find(function (column) {
+            return column.field === field;
+        }) || null;
+    }
+
+    function sameCellValue(left, right) {
+
+        return String(left ?? '').trim().toLowerCase() ===
+            String(right ?? '').trim().toLowerCase();
+    }
+
+    function ensureVisibleColumn() {
+
+        if (visibleColumns().length > 0) return;
+
+        if (columns.length > 0) columns[0].hidden = false;
+    }
+
+    async function applyChatActions(actions) {
+
+        if (!Array.isArray(actions) || actions.length === 0) return;
+
+        let needsLoad = false;
+        let needsRender = false;
+        let selection = null;
+        let highlight = null;
+        let clearHighlightRequested = false;
+
+        actions.slice(0, 20).forEach(function (action) {
+
+            if (!action || typeof action !== 'object') return;
+
+            const type = String(action.type ?? action.Type ?? '').toLowerCase();
+
+            switch (type) {
+
+                case 'filter': {
+
+                    const field = action.field ?? action.Field;
+                    const column = chatColumn(field);
+
+                    if (!column || !filterableEnabled || !column.filterable) return;
+
+                    let operator = String(action.operator ?? action.Operator ?? '').toLowerCase();
+
+                    if (chatOperators.indexOf(operator) < 0) {
+                        operator = defaultOperatorFor(column);
+                    }
+
+                    const value = action.value ?? action.Value;
+                    const nullary = operator === 'isnull' || operator === 'isnotnull';
+
+                    if (!nullary && (value === null || value === undefined || String(value) === '')) {
+                        return;
+                    }
+
+                    const filter = {
+                        field: column.field,
+                        operator: operator,
+                        value: nullary ? '' : String(value)
+                    };
+
+                    const index = state.filters.findIndex(function (item) {
+                        return item.field === column.field;
+                    });
+
+                    if (index >= 0) state.filters[index] = filter;
+                    else state.filters.push(filter);
+
+                    state.page = 1;
+                    needsLoad = true;
+                    return;
+                }
+
+                case 'clearfilters':
+
+                    state.filters = [];
+                    state.page = 1;
+                    needsLoad = true;
+                    return;
+
+                case 'sort': {
+
+                    const column = chatColumn(action.field ?? action.Field);
+
+                    if (!column || !sortableEnabled || !column.sortable) return;
+
+                    const dir = String(action.dir ?? action.Dir ?? '').toLowerCase();
+
+                    state.sorts = [{ field: column.field, dir: dir === 'desc' ? 'desc' : 'asc' }];
+                    state.page = 1;
+                    needsLoad = true;
+                    return;
+                }
+
+                case 'clearsorts':
+
+                    state.sorts = [];
+                    state.page = 1;
+                    needsLoad = true;
+                    return;
+
+                case 'page': {
+
+                    let page = parseInt(action.page ?? action.Page, 10);
+
+                    if (!page || page < 1) return;
+
+                    const totalPages = Math.max(
+                        Math.ceil(lastResult.total / state.pageSize), 1);
+
+                    page = Math.min(page, totalPages);
+
+                    if (page !== state.page) {
+
+                        state.page = page;
+                        needsLoad = true;
+                    }
+
+                    return;
+                }
+
+                case 'pagesize': {
+
+                    const raw = parseInt(action.pageSize ?? action.PageSize, 10);
+
+                    if (!raw || raw < 1) return;
+
+                    const size = Math.min(raw, 1000);
+
+                    if (size !== state.pageSize) {
+
+                        state.pageSize = size;
+                        state.page = 1;
+
+                        try {
+                            localStorage.setItem(pageSizeStorageKey, size.toString());
+                        }
+                        catch {
+                            // ignore
+                        }
+
+                        needsLoad = true;
+                    }
+
+                    return;
+                }
+
+                case 'hidecolumns':
+                case 'showcolumns': {
+
+                    const fields = action.fields ?? action.Fields;
+
+                    if (!Array.isArray(fields)) return;
+
+                    const hidden = type === 'hidecolumns';
+
+                    fields.forEach(function (field) {
+
+                        const column = chatColumn(field);
+
+                        if (column) column.hidden = hidden;
+                    });
+
+                    ensureVisibleColumn();
+                    saveColumnState();
+
+                    needsRender = true;
+                    return;
+                }
+
+                case 'showallcolumns':
+
+                    columns.forEach(function (column) {
+                        column.hidden = false;
+                    });
+
+                    saveColumnState();
+
+                    needsRender = true;
+                    return;
+
+                case 'select': {
+
+                    const field = action.field ?? action.Field;
+                    const value = action.value ?? action.Value;
+
+                    if (!field || value === null || value === undefined) return;
+
+                    selection = { field: field, value: String(value) };
+                    return;
+                }
+
+                case 'highlight': {
+
+                    const field = action.field ?? action.Field;
+                    const value = action.value ?? action.Value;
+
+                    if (value === null || value === undefined || String(value) === '') return;
+
+                    const column = field ? chatColumn(field) : null;
+
+                    highlight = {
+                        field: column ? column.field : null,
+                        value: String(value)
+                    };
+
+                    return;
+                }
+
+                case 'clearhighlight':
+
+                    clearHighlightRequested = true;
+                    return;
+
+                case 'refresh':
+
+                    needsLoad = true;
+                    return;
+            }
+        });
+
+        if (needsLoad) await load();
+        else if (needsRender) render();
+
+        let changed = false;
+
+        if (clearHighlightRequested) {
+
+            chatState.highlight = null;
+            changed = true;
+        }
+
+        if (highlight) {
+
+            chatState.highlight = highlight;
+            changed = true;
+        }
+
+        if (selection) {
+
+            const index = currentRows.findIndex(function (row) {
+
+                return sameCellValue(getValue(row, selection.field), selection.value);
+            });
+
+            if (index >= 0) {
+
+                state.selectedIndex = index;
+                changed = true;
+            }
+        }
+
+        if (changed) render();
+
+        if (selection && state.selectedIndex >= 0) {
+
+            triggerGridEvent('Change', {
+                sender: api,
+                data: api.selectedData()
+            });
+        }
+    }
+
+    renderChatMessages();
+
+    // --------------------------------------------------------
     // Public API
     // --------------------------------------------------------
 
@@ -1980,6 +2608,198 @@ Tech.register('grid', function (el) {
             return api;
         },
 
+        setSort: function (field, dir) {
+
+            const column = chatColumn(field);
+
+            if (!column) return api;
+
+            state.sorts = [{
+                field: column.field,
+                dir: dir === 'desc' ? 'desc' : 'asc'
+            }];
+
+            state.page = 1;
+
+            return api;
+        },
+
+        setSorts: function (sorts) {
+
+            state.sorts = (Array.isArray(sorts) ? sorts : [])
+                .map(function (sort) {
+
+                    const column = chatColumn(sort && sort.field);
+
+                    if (!column) return null;
+
+                    return {
+                        field: column.field,
+                        dir: sort.dir === 'desc' ? 'desc' : 'asc'
+                    };
+                })
+                .filter(Boolean);
+
+            state.page = 1;
+
+            return api;
+        },
+
+        clearSorts: function () {
+
+            state.sorts = [];
+            state.page = 1;
+
+            return api;
+        },
+
+        setPage: function (page) {
+
+            const parsed = parseInt(page, 10);
+
+            if (parsed > 0) state.page = parsed;
+
+            return api;
+        },
+
+        setPageSize: function (size) {
+
+            const parsed = parseInt(size, 10);
+
+            if (parsed > 0) {
+
+                state.pageSize = Math.min(parsed, 1000);
+                state.page = 1;
+
+                try {
+                    localStorage.setItem(
+                        pageSizeStorageKey,
+                        state.pageSize.toString());
+                }
+                catch {
+                    // ignore
+                }
+            }
+
+            return api;
+        },
+
+        setColumnVisible: function (fieldOrKey, visible) {
+
+            const column = columns.find(function (item) {
+                return item.field === fieldOrKey || item.key === fieldOrKey;
+            });
+
+            if (!column) return api;
+
+            column.hidden = !visible;
+
+            ensureVisibleColumn();
+
+            saveColumnState();
+
+            render();
+
+            return api;
+        },
+
+        showAllColumns: function () {
+
+            columns.forEach(function (column) {
+                column.hidden = false;
+            });
+
+            saveColumnState();
+
+            render();
+
+            return api;
+        },
+
+        highlight: function (field, value) {
+
+            if (value === null || value === undefined || value === '') {
+                return api.clearHighlight();
+            }
+
+            const column = field ? chatColumn(field) : null;
+
+            chatState.highlight = {
+                field: column ? column.field : null,
+                value: String(value)
+            };
+
+            render();
+
+            return api;
+        },
+
+        clearHighlight: function () {
+
+            chatState.highlight = null;
+
+            render();
+
+            return api;
+        },
+
+        selectBy: function (field, value) {
+
+            const column = chatColumn(field);
+
+            if (!column || value === null || value === undefined) return api;
+
+            const index = currentRows.findIndex(function (row) {
+                return sameCellValue(getValue(row, column.field), value);
+            });
+
+            if (index < 0) return api;
+
+            state.selectedIndex = index;
+
+            render();
+
+            triggerGridEvent('Change', {
+                sender: api,
+                data: api.selectedData()
+            });
+
+            return api;
+        },
+
+        chat: chatOptions ? {
+
+            open: function () {
+                setChatOpen(true);
+                return api;
+            },
+
+            close: function () {
+                setChatOpen(false);
+                return api;
+            },
+
+            toggle: function () {
+                toggleChat();
+                return api;
+            },
+
+            isOpen: function () {
+                return chatState.open;
+            },
+
+            send: function (message) {
+                return sendChat(message);
+            },
+
+            messages: function () {
+
+                return chatState.messages.map(function (message) {
+                    return { role: message.role, content: message.content };
+                });
+            }
+        } : null,
+
         state: function () {
 
             return {
@@ -1994,7 +2814,13 @@ Tech.register('grid', function (el) {
                         operator: filter.operator,
                         value: filter.value
                     };
-                })
+                }),
+                highlight: chatState.highlight
+                    ? {
+                        field: chatState.highlight.field,
+                        value: chatState.highlight.value
+                    }
+                    : null
             };
         }
     };
@@ -13650,6 +14476,552 @@ Tech.Chart.instances = Tech.Chart.instances || new Map();
     });
 
     Tech.register('chart', initChart);
+})();
+
+
+// ------------------------------------------------------------
+// Chat
+// ------------------------------------------------------------
+
+(function () {
+
+    Tech.Chat = Tech.Chat || {};
+    Tech.Chat.instances = Tech.Chat.instances || new Map();
+
+    const roles = ['user', 'assistant', 'agent', 'system'];
+
+    function field(obj, name) {
+
+        if (!obj) return undefined;
+
+        if (obj[name] !== undefined) return obj[name];
+
+        const pascal = name.charAt(0).toUpperCase() + name.slice(1);
+
+        return obj[pascal];
+    }
+
+    function normalizeRole(role) {
+
+        const value = String(role || '').toLowerCase();
+
+        if (value === 'error') return 'error';
+
+        return roles.indexOf(value) >= 0 ? value : 'assistant';
+    }
+
+    function nowTime() {
+
+        try {
+
+            return new Intl.DateTimeFormat('fa-IR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(new Date());
+        }
+        catch {
+            return '';
+        }
+    }
+
+    function newConversationId() {
+
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+
+        return 'chat-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 8);
+    }
+
+    function parseOptions(el) {
+
+        try {
+            return JSON.parse(el.dataset.techChat || '{}') || {};
+        }
+        catch {
+            return {};
+        }
+    }
+
+    async function postJson(url, body, element) {
+
+        const headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json; charset=UTF-8'
+        };
+
+        const token = Tech.getAntiforgeryToken(element);
+
+        if (token) headers['RequestVerificationToken'] = token;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status} ${response.statusText}`.trim());
+        }
+
+        return response.json();
+    }
+
+    function initChat(el) {
+
+        if (el._techChatInstance) return el._techChatInstance;
+
+        const options = parseOptions(el);
+
+        options.mode = options.mode === 'support' ? 'support' : 'assistant';
+        options.pollInterval = Math.max(2, parseInt(options.pollInterval, 10) || 4);
+        options.maxLength = parseInt(options.maxLength, 10) || 1000;
+
+        const log = el.querySelector('.tech-chat-log');
+        const form = el.querySelector('.tech-chat-composer');
+        const input = el.querySelector('.tech-chat-input');
+        const sendButton = el.querySelector('.tech-chat-send');
+        const clearButton = el.querySelector('[data-chat-action="clear"]');
+
+        if (!log || !form || !input) return null;
+
+        const state = {
+            messages: [],
+            busy: false,
+            typing: false,
+            lastId: 0,
+            conversationId: newConversationId(),
+            timer: null,
+            pollInFlight: false,
+            generation: 0,
+            destroyed: false
+        };
+
+        const key = el.id || el;
+
+        if (input.getAttribute('maxlength')) {
+            input.setAttribute(
+                'maxlength', String(options.maxLength));
+        }
+
+        function autosize() {
+
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 112) + 'px';
+        }
+
+        function syncComposer() {
+
+            if (sendButton) sendButton.disabled = state.busy;
+            form.setAttribute('aria-busy', state.busy ? 'true' : 'false');
+            el.classList.toggle('tech-chat-busy', state.busy);
+        }
+
+        function messageHtml(message) {
+
+            const role = message.role === 'error'
+                ? 'error'
+                : normalizeRole(message.role);
+
+            const meta = [];
+
+            if (role !== 'user' && message.sender) {
+                meta.push(message.sender);
+            }
+
+            if (message.time) meta.push(message.time);
+
+            return '<div class="tech-chat-message tech-chat-message-' + role + '">' +
+                '<div class="tech-chat-body">' +
+                '<div class="tech-chat-bubble">' +
+                Tech.escapeHtml(message.content) +
+                '</div>' +
+                (meta.length > 0
+                    ? '<span class="tech-chat-meta">' +
+                        Tech.escapeHtml(meta.join(' · ')) +
+                        '</span>'
+                    : '') +
+                '</div></div>';
+        }
+
+        function typingHtml() {
+
+            const role = options.mode === 'support' ? 'agent' : 'assistant';
+
+            return '<div class="tech-chat-message tech-chat-message-' + role + '">' +
+                '<div class="tech-chat-body">' +
+                '<div class="tech-chat-bubble tech-chat-typing" aria-label="در حال نوشتن">' +
+                '<span></span><span></span><span></span>' +
+                '</div></div></div>';
+        }
+
+        function render() {
+
+            const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+
+            let html = '';
+
+            if (state.messages.length === 0) {
+
+                if (options.welcome) {
+
+                    html += '<div class="tech-chat-welcome">' +
+                        Tech.escapeHtml(options.welcome) +
+                        '</div>';
+                }
+
+                if (Array.isArray(options.suggestions) &&
+                    options.suggestions.length > 0) {
+
+                    html += '<div class="tech-chat-suggestions">' +
+                        options.suggestions.map(function (suggestion) {
+                            return '<button type="button" class="tech-chat-chip" ' +
+                                `data-text="${Tech.escapeHtml(suggestion)}">` +
+                                Tech.escapeHtml(suggestion) +
+                                '</button>';
+                        }).join('') +
+                        '</div>';
+                }
+            }
+
+            state.messages.forEach(function (message) {
+                html += messageHtml(message);
+            });
+
+            if (state.typing) html += typingHtml();
+
+            log.innerHTML = html;
+
+            if (nearBottom || state.busy) {
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+
+        function append(message, notify) {
+
+            const normalized = {
+                role: normalizeRole(message.role),
+                content: String(message.content == null ? '' : message.content),
+                sender: message.sender || null,
+                time: message.time || nowTime()
+            };
+
+            state.messages.push(normalized);
+            render();
+
+            if (notify !== false) {
+                Tech.trigger(el, 'Receive', normalized);
+            }
+
+            return normalized;
+        }
+
+        function readServerMessages(data, includeUser) {
+
+            const list = field(data, 'messages');
+
+            if (!Array.isArray(list)) return;
+
+            list.forEach(function (item) {
+
+                const role = normalizeRole(field(item, 'role'));
+
+                if (role === 'user' && !includeUser) return;
+
+                const id = Number(field(item, 'id'));
+
+                if (id && id > state.lastId) state.lastId = id;
+
+                append({
+                    role: role,
+                    content: field(item, 'content') || '',
+                    sender: field(item, 'sender') || null,
+                    time: field(item, 'time') || null
+                });
+            });
+        }
+
+        function poll() {
+
+            if (state.destroyed || state.pollInFlight ||
+                !options.pollUrl || document.hidden) {
+                return;
+            }
+
+            state.pollInFlight = true;
+
+            const generation = state.generation;
+
+            const params = new URLSearchParams({
+                conversation: state.conversationId,
+                after: String(state.lastId)
+            });
+
+            Tech.requestJson(options.pollUrl, { params: params })
+                .then(function (data) {
+
+                    if (state.destroyed || generation !== state.generation) return;
+
+                    readServerMessages(data, false);
+
+                    const typing = field(data, 'typing');
+
+                    if (typing !== undefined && !!typing !== state.typing) {
+                        state.typing = !!typing;
+                        render();
+                    }
+                })
+                .catch(function (err) {
+                    console.warn('TechUI Chat polling failed:', err);
+                })
+                .finally(function () {
+                    state.pollInFlight = false;
+                });
+        }
+
+        function startPolling() {
+
+            if (!options.pollUrl || state.timer || state.destroyed) return;
+
+            state.timer = window.setInterval(
+                poll, options.pollInterval * 1000);
+
+            poll();
+        }
+
+        function stopPolling() {
+
+            if (!state.timer) return;
+
+            window.clearInterval(state.timer);
+            state.timer = null;
+        }
+
+        async function send(raw) {
+
+            const text = String(raw == null ? '' : raw).trim();
+
+            if (!text || state.busy || state.destroyed) return;
+
+            const generation = state.generation;
+
+            const history = state.messages
+                .filter(function (message) {
+                    return message.role === 'user' ||
+                        message.role === 'assistant' ||
+                        message.role === 'agent';
+                })
+                .slice(-12)
+                .map(function (message) {
+                    return {
+                        role: message.role,
+                        content: message.content
+                    };
+                });
+
+            input.value = '';
+            autosize();
+
+            append({ role: 'user', content: text }, false);
+
+            Tech.trigger(el, 'Send', { message: text });
+
+            state.busy = true;
+            state.typing = options.mode !== 'support';
+            render();
+            syncComposer();
+
+            try {
+
+                const data = await postJson(options.url, {
+                    message: text,
+                    conversationId: state.conversationId,
+                    sender: options.sender || null,
+                    history: history
+                }, el);
+
+                if (state.destroyed || generation !== state.generation) return;
+
+                const messageId = Number(field(data, 'messageId'));
+
+                if (messageId && messageId > state.lastId) {
+                    state.lastId = messageId;
+                }
+
+                const typing = field(data, 'typing');
+
+                state.typing = typing === undefined ? false : !!typing;
+
+                const reply = field(data, 'reply');
+
+                if (typeof reply === 'string' && reply.trim()) {
+
+                    append({
+                        role: 'assistant',
+                        content: reply,
+                        sender: field(data, 'sender') || null
+                    });
+                }
+
+                readServerMessages(data, false);
+
+                if (options.mode === 'support') startPolling();
+            }
+            catch (err) {
+
+                if (state.destroyed || generation !== state.generation) return;
+
+                console.error('TechUI Chat error:', err);
+
+                state.typing = false;
+
+                append({
+                    role: 'error',
+                    content: 'ارتباط با سرور برقرار نشد. دوباره تلاش کنید.'
+                }, false);
+
+                Tech.trigger(el, 'Error', { error: err });
+            }
+            finally {
+
+                if (!state.destroyed && generation === state.generation) {
+
+                    state.busy = false;
+                    render();
+                    syncComposer();
+                }
+            }
+        }
+
+        function clear() {
+
+            state.generation++;
+            state.messages = [];
+            state.typing = false;
+            state.busy = false;
+            state.lastId = 0;
+            state.conversationId = newConversationId();
+
+            render();
+            syncComposer();
+
+            Tech.trigger(el, 'Clear', {});
+        }
+
+        form.addEventListener('submit', function (ev) {
+
+            ev.preventDefault();
+
+            send(input.value);
+        });
+
+        input.addEventListener('input', autosize);
+
+        input.addEventListener('keydown', function (ev) {
+
+            if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+
+                ev.preventDefault();
+
+                send(input.value);
+            }
+        });
+
+        log.addEventListener('click', function (ev) {
+
+            const chip = ev.target.closest('.tech-chat-chip');
+
+            if (chip) send(chip.dataset.text || '');
+        });
+
+        if (clearButton) {
+            clearButton.addEventListener('click', clear);
+        }
+
+        document.addEventListener('visibilitychange', function () {
+
+            if (!document.hidden && state.timer) poll();
+        });
+
+        const instance = {
+
+            id: el.id || null,
+
+            element: el,
+
+            getMessages: function () {
+                return state.messages.slice();
+            },
+
+            send: send,
+
+            receive: function (message) {
+
+                if (typeof message === 'string') {
+                    return append({ role: 'agent', content: message });
+                }
+
+                return append(message || {});
+            },
+
+            typing: function (show) {
+
+                state.typing = !!show;
+                render();
+            },
+
+            clear: clear,
+
+            startPolling: startPolling,
+
+            stopPolling: stopPolling,
+
+            focus: function () {
+                input.focus();
+            },
+
+            isBusy: function () {
+                return state.busy;
+            },
+
+            destroy: function () {
+
+                state.destroyed = true;
+                stopPolling();
+
+                Tech.Chat.instances.delete(key);
+
+                el._techChatInstance = null;
+                el.removeAttribute('data-tech-chat-bound');
+            }
+        };
+
+        el._techChatInstance = instance;
+
+        Tech.Chat.instances.set(key, instance);
+
+        render();
+        syncComposer();
+        autosize();
+
+        return instance;
+    }
+
+    Tech.Chat.get = function (target) {
+
+        if (target && target.nodeType === 1) {
+            return target._techChatInstance || null;
+        }
+
+        const el = document.getElementById(target);
+
+        return el ? el._techChatInstance || null : null;
+    };
+
+    Tech.register('chat', initChat);
 })();
 
 

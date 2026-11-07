@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using TechUI.Mvc.Chart;
+using TechUI.Mvc.Chat;
 using TechUI.Mvc.DropDownList;
 using TechUI.Mvc.DropDownTree;
 using TechUI.Mvc.FileUpload;
@@ -355,6 +356,11 @@ namespace TechUI.Mvc.Html
         public BreadcrumbBuilder Breadcrumb(string? id = null)
         {
             return new BreadcrumbBuilder(id);
+        }
+
+        public ChatBuilder Chat(string? id = null)
+        {
+            return new ChatBuilder(id);
         }
 
         public MultiSelectBuilder MultiSelectFor<TModel, TValue>(

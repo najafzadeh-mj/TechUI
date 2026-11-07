@@ -15,4 +15,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.18" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\GridChatParser.cs" Link="Services\GridChatParser.cs" />
+  </ItemGroup>
+
 </Project>
