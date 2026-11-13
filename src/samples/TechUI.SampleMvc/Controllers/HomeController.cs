@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using System.Diagnostics;
+using TechUI.Mvc.Captcha;
 using TechUI.Mvc.Chat;
 using TechUI.Mvc.Grid;
 using TechUI.Mvc.Infrastructure;
@@ -350,6 +351,38 @@ public class HomeController : Controller
         ViewBag.Submitted = model;
 
         return View(model);
+    }
+
+    [HttpGet]
+    public IActionResult Captcha()
+    {
+        return View(new CaptchaSampleModel());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Captcha(
+        CaptchaSampleModel model,
+        CancellationToken cancellationToken)
+    {
+        var captcha = await HttpContext.Request.ValidateTechCaptchaAsync(
+            nameof(model.Captcha),
+            cancellationToken);
+
+        if (!captcha.IsValid)
+        {
+            ModelState.AddModelError(
+                nameof(model.Captcha),
+                captcha.Error ?? "کد امنیتی نامعتبر است.");
+
+            return View(model);
+        }
+
+        ModelState.Clear();
+
+        ViewBag.Success = true;
+
+        return View(new CaptchaSampleModel());
     }
 
     [HttpGet]

@@ -4,6 +4,13 @@ using System.Text.Encodings.Web;
 
 namespace TechUI.Mvc.Inputs
 {
+    public enum DatePickerCalendar
+    {
+        Jalali,
+        Gregorian,
+        Both
+    }
+
     public sealed class DatePickerBuilder : InputBuilderBase<DatePickerBuilder>
     {
         private string _format = "yyyy/MM/dd";
@@ -12,6 +19,7 @@ namespace TechUI.Mvc.Inputs
         private bool _todayButton = true;
         private bool _clearButton = true;
         private bool _openOnFocus = true;
+        private DatePickerCalendar _calendar = DatePickerCalendar.Both;
 
         public DatePickerBuilder(string name) : base(name)
         {
@@ -57,6 +65,12 @@ namespace TechUI.Mvc.Inputs
             return this;
         }
 
+        public DatePickerBuilder Calendar(DatePickerCalendar calendar)
+        {
+            _calendar = calendar;
+            return this;
+        }
+
         public override void WriteTo(TextWriter writer, HtmlEncoder encoder)
         {
             var wrapper = CreateWrapper("datepicker", "tech-datepicker");
@@ -71,6 +85,13 @@ namespace TechUI.Mvc.Inputs
             {
                 wrapper.Attributes["data-open-on-focus"] = "false";
             }
+
+            wrapper.Attributes["data-calendar"] = _calendar switch
+            {
+                DatePickerCalendar.Jalali => "jalali",
+                DatePickerCalendar.Gregorian => "gregorian",
+                _ => "both"
+            };
 
             if (_min.HasValue)
             {

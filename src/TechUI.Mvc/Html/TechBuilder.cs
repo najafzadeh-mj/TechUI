@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using TechUI.Mvc.Chart;
+using TechUI.Mvc.Captcha;
 using TechUI.Mvc.Chat;
 using TechUI.Mvc.DropDownList;
 using TechUI.Mvc.DropDownTree;
@@ -341,6 +342,11 @@ namespace TechUI.Mvc.Html
         public FileUploadBuilder FileUpload(string name)
         {
             return new FileUploadBuilder(_html, name);
+        }
+
+        public CaptchaBuilder Captcha(string name)
+        {
+            return new CaptchaBuilder(_html, name);
         }
 
         public WizardBuilder Wizard(string? id = null)

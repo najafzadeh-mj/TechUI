@@ -1,3 +1,4 @@
+@using TechUI.Mvc.Inputs
 @model TechUI.SampleMvc.Models.DateRangeSampleModel
 
 @{
@@ -6,7 +7,7 @@
     var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.DateRangeSampleModel;
 }
 
-<h1>انتخاب بازه تاریخ (جلالی)</h1>
+<h1>انتخاب بازه تاریخ (شمسی / میلادی)</h1>
 
 @if (submitted is not null)
 {
@@ -20,7 +21,10 @@
 
 <p class="text-muted">
     ابتدا روز شروع و سپس روز پایان را انتخاب کنید. با نگه‌داشتن ماوس روی روزها،
-    بازه به‌صورت پیش‌نمایش نمایش داده می‌شود. دو ماه پشت سر هم در یک پنل دیده می‌شوند.
+    بازه به‌صورت پیش‌نمایش نمایش داده می‌شود. با دکمهٔ کوچک «شمسی / میلادی» داخل
+    پنل، تقویم انتخاب را عوض کنید؛ مقدار مخفی فرم، API کلاینت و payload رویداد
+    همیشه میلادی ISO (<code>yyyy-MM-dd</code>) است و فقط متن نمایشی فیلد مطابق
+    تقویم فعال تغییر می‌کند.
 </p>
 
 <form asp-action="DateRange" method="post" class="row g-3" style="max-width: 640px;">
@@ -33,7 +37,9 @@
             .Placeholders("تاریخ شروع", "تاریخ پایان")
             .Min(new DateTime(1900, 1, 1))
             .Max(DateTime.Today.AddYears(1))
-            .Format("yyyy/MM/dd"))
+            .Format("yyyy/MM/dd")
+            .Calendar(DatePickerCalendar.Both)
+            .Change("rangeChanged"))
     </div>
 
     <div class="col-12">
@@ -54,21 +60,149 @@
 
 </form>
 
-<div class="alert alert-light border mt-3" style="max-width: 640px;">
-    <div><strong>API عمومی:</strong></div>
-    <code>Tech.DateRangePicker.value('FromDate')</code>
-    <br />
-    <code>Tech.DateRangePicker.setValue('FromDate', '2026-03-21', '2026-04-20')</code>
+<div class="card mt-4" style="max-width: 640px;">
+    <div class="card-body">
+        <h2 class="h6">حالت‌های ثابت تقویم</h2>
+        <p class="text-muted small mb-3">
+            تقویم را هنگام تعریف کامپوننت انتخاب کنید: فقط شمسی، فقط میلادی یا
+            ترکیبی. در حالت ثابت، دکمهٔ تغییر تقویم نمایش داده نمی‌شود.
+        </p>
+
+        <div class="row g-3">
+            <div class="col-12">
+                <label class="form-label">فقط شمسی</label>
+                @(Html.Tech().DateRange("JalaliRangeFrom", "JalaliRangeTo")
+                    .Calendar(DatePickerCalendar.Jalali)
+                    .Values("2026-10-01", "2026-10-15")
+                    .Format("yyyy/MM/dd"))
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">فقط میلادی</label>
+                @(Html.Tech().DateRange("GregorianRangeFrom", "GregorianRangeTo")
+                    .Calendar(DatePickerCalendar.Gregorian)
+                    .Values("2026-10-01", "2026-10-15")
+                    .Format("MM/dd/yyyy"))
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4" style="max-width: 640px;">
+    <div class="card-body">
+        <h2 class="h6">دسترسی به مقدار میلادی</h2>
+        <p class="text-muted small mb-3">
+            این مقادیر از سه مسیر مستقل خوانده می‌شوند و همیشه میلادی هستند:
+            API جاوااسکریپت، hidden input فرم و binding مدل سمت سرور.
+        </p>
+
+        <div class="small mb-3">
+            <div class="mb-1">شروع از API: <code id="rangeApiStart">—</code></div>
+            <div class="mb-1">پایان از API: <code id="rangeApiEnd">—</code></div>
+            <div class="mb-1">hidden input شروع: <code id="rangeHiddenStart">—</code></div>
+            <div class="mb-1">hidden input پایان: <code id="rangeHiddenEnd">—</code></div>
+            <div class="mb-1">متن نمایشی فیلدها: <code id="rangeDisplay">—</code></div>
+            <div class="mb-1">تقویم فعال: <code id="rangeCalendarValue">—</code></div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" id="rangeCalendarJalali" class="btn btn-sm btn-outline-secondary">
+                نمایش شمسی
+            </button>
+            <button type="button" id="rangeCalendarGregorian" class="btn btn-sm btn-outline-secondary">
+                نمایش میلادی
+            </button>
+            <button type="button" id="rangeSetSample" class="btn btn-sm btn-outline-primary">
+                تنظیم ۲۰۲۶-۰۳-۲۱ تا ۲۰۲۶-۰۴-۲۰
+            </button>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
     <script>
-        document.getElementById('rangeApiButton').addEventListener('click', function () {
-            Tech.DateRangePicker.setValue('FromDate', '2026-03-21', '2026-04-20');
+        (function () {
 
-            const value = Tech.DateRangePicker.value('FromDate');
+            const startInput = document.getElementById('FromDate');
+            const root = startInput ? startInput.closest('.tech-daterange') : null;
 
-            console.log('DateRange value:', value);
-        });
+            if (!root) return;
+
+            const hidden = root.querySelectorAll('input[type="hidden"]');
+
+            const apiStart = document.getElementById('rangeApiStart');
+            const apiEnd = document.getElementById('rangeApiEnd');
+            const hiddenStart = document.getElementById('rangeHiddenStart');
+            const hiddenEnd = document.getElementById('rangeHiddenEnd');
+            const display = document.getElementById('rangeDisplay');
+            const calendarValue = document.getElementById('rangeCalendarValue');
+
+            function refresh() {
+
+                const range = Tech.DateRangePicker.get('FromDate');
+
+                if (!range) return;
+
+                const value = range.value();
+
+                apiStart.textContent = value.start || '—';
+                apiEnd.textContent = value.end || '—';
+                hiddenStart.textContent = hidden[0].value || '—';
+                hiddenEnd.textContent = hidden[1].value || '—';
+                display.textContent =
+                    (root.querySelector('.tech-daterange-start').value || '—')
+                    + '  ←  '
+                    + (root.querySelector('.tech-daterange-end').value || '—');
+                calendarValue.textContent =
+                    range.calendar() === 'gregorian' ? 'میلادی' : 'شمسی';
+            }
+
+            window.rangeChanged = refresh;
+
+            // دکمهٔ داخل پنل رویداد Change نمی‌فرستد (مقدار عوض نشده است).
+            root.addEventListener('click', function (event) {
+
+                if (event.target.closest('[data-action="calendar"]')) {
+                    setTimeout(refresh, 0);
+                }
+            });
+
+            document.getElementById('rangeCalendarJalali')
+                .addEventListener('click', function () {
+
+                    Tech.DateRangePicker.setCalendar('FromDate', 'jalali');
+                    refresh();
+                });
+
+            document.getElementById('rangeCalendarGregorian')
+                .addEventListener('click', function () {
+
+                    Tech.DateRangePicker.setCalendar('FromDate', 'gregorian');
+                    refresh();
+                });
+
+            document.getElementById('rangeSetSample')
+                .addEventListener('click', function () {
+
+                    Tech.DateRangePicker.setValue(
+                        'FromDate', '2026-03-21', '2026-04-20');
+                    refresh();
+                });
+
+            document.getElementById('rangeApiButton')
+                .addEventListener('click', function () {
+
+                    Tech.DateRangePicker.setValue(
+                        'FromDate', '2026-03-21', '2026-04-20');
+                    refresh();
+                });
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', refresh);
+            }
+            else {
+                refresh();
+            }
+        })();
     </script>
 }

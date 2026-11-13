@@ -1,3 +1,4 @@
+using TechUI.Mvc.Captcha;
 using TechUI.SampleMvc.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +26,14 @@ builder.Services
 
 builder.Services.AddHttpClient<DeepSeekAssistant>();
 
+// Captcha tokens are encrypted with this secret. The sample falls back to a
+// random per-process secret, so restarting the app invalidates open challenges.
+builder.Services.AddTechUICaptcha(options =>
+{
+    options.Secret = builder.Configuration["TechUI:Captcha:Secret"] ?? "";
+    options.ExpiresIn = TimeSpan.FromMinutes(10);
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -41,6 +50,7 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+app.MapTechUICaptcha();
 
 app.MapControllerRoute(
     name: "default",

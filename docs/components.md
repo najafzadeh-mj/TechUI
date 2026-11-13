@@ -20,6 +20,7 @@
 - [TreeView](#treeview)
 - [DropDownTree](#dropdowntree)
 - [FileUpload](#fileupload)
+- [Captcha](#captcha)
 - [Wizard / Stepper](#wizard--stepper)
 - [Timeline](#timeline)
 - [Breadcrumb](#breadcrumb)
@@ -587,51 +588,101 @@ editor.setValue('<p>متن جدید</p>');
 
 ## DatePicker
 
-تقویم جلالی است؛ مقدار ارسالی به سرور و مخفی به‌صورت ISO
-(`yyyy-MM-dd`) و متن نمایشی با `Format` تولید می‌شود.
+تقویم جلالی، میلادی یا ترکیبی. در حالت ترکیبی کاربر با دکمهٔ کوچک داخل پنل بین
+دو تقویم جابه‌جا می‌شود. مقدار مخفی فرم، خروجی `Tech.DatePicker.value` و payload
+رویداد همیشه ISO میلادی (`yyyy-MM-dd`) است و به‌صورت مستقیم به `DateTime` سمت
+سرور bind می‌شود. فقط متن نمایشی فیلد با `Format` و تقویم فعال ساخته می‌شود.
 
 ```razor
+@using TechUI.Mvc.Inputs
+
 @(Html.Tech().DatePickerFor<MyModel, DateTime?>(m => m.BirthDate)
     .Format("yyyy/MM/dd")
     .Min(new DateTime(1900, 1, 1))
     .Max(DateTime.Today)
     .TodayButton()
     .ClearButton()
+    .Calendar(DatePickerCalendar.Both)
     .OpenOnFocus())
 ```
 
 اختصاصی: `Format(string)`, `Min(DateTime)`, `Max(DateTime)`,
 `TodayButton(bool = true)`, `ClearButton(bool = true)`,
-`OpenOnFocus(bool = true)`.
+`Calendar(DatePickerCalendar)`, `OpenOnFocus(bool = true)`.
+
+`DatePickerCalendar` سه حالت دارد:
+
+| مقدار | رفتار |
+| --- | --- |
+| `Jalali` | فقط تقویم شمسی؛ دکمهٔ تغییر تقویم ندارد |
+| `Gregorian` | فقط تقویم میلادی؛ دکمهٔ تغییر تقویم ندارد |
+| `Both` (پیش‌فرض) | هر دو تقویم با دکمهٔ شمسی/میلادی |
+
+در حالت ثابت، `setCalendar` و دکمهٔ پنل کاری نمی‌کنند و تقویم روی همان حالت
+قفل می‌ماند. هر دو تقویم هفته را از شنبه شروع می‌کنند و `Min`/`Max` روی مقدار
+میلادی اعمال می‌شوند.
 
 ```js
 const picker = Tech.DatePicker.get('BirthDate');
-picker.value();                  // ISO
-picker.setValue('1990-05-20');   // ISO میلادی
+
+picker.value();                       // ISO میلادی، مثلاً '2026-03-21'
+picker.setValue('1990-05-20');        // ISO میلادی
+picker.calendar();                    // 'jalali' | 'gregorian'
+picker.setCalendar('gregorian');      // در حالت ثابت نادیده گرفته می‌شود
 picker.open();
 picker.close();
+
+Tech.DatePicker.value('BirthDate');              // همان ISO
+Tech.DatePicker.setCalendar('BirthDate', 'jalali');
 ```
 
-رویداد `Change`: `{ sender, value }` که `value` همان ISO مخفی است.
+همین مقدار از DOM و jQuery هم در دسترس است؛ شناسهٔ `BirthDate` روی input
+نمایشی است و مقدار میلادی در hidden input کنار آن قرار دارد:
+
+```js
+document.querySelector('#BirthDate')
+    .closest('.tech-datepicker')
+    .querySelector('input[type="hidden"]').value;   // ISO میلادی
+
+$('#BirthDate').closest('.tech-datepicker')
+    .find('input[type="hidden"]').val();            // ISO میلادی
+
+$('#BirthDate').val();                              // متن نمایشی
+```
+
+رویداد `Change`: `{ sender, value, display, calendar }`؛ `value` همان ISO
+میلادی، `display` متن نمایشی و `calendar` تقویم فعال (`jalali` یا
+`gregorian`) است. سمت سرور نیز مستقیماً `<input type="hidden" name="BirthDate">`
+را با همان ISO دریافت می‌کند.
 
 ---
 
 ## DateRangePicker
 
-دو فیلد شروع/پایان با یک پنل مشترک (دو ماه نمایش هم‌زمان).
+دو فیلد شروع/پایان با یک پنل مشترک (دو ماه نمایش هم‌زمان). مثل DatePicker
+می‌تواند جلالی، میلادی یا ترکیبی باشد. در حالت ترکیبی کاربر با دکمهٔ کوچک داخل
+پنل بین دو تقویم جابه‌جا می‌شود. مقدار دو hidden input، خروجی
+`Tech.DateRangePicker.value` و payload رویداد همیشه ISO میلادی (`yyyy-MM-dd`)
+است و مستقیماً به `DateTime` سمت سرور bind می‌شود. فقط متن نمایشی فیلدها با
+`Format` و تقویم فعال ساخته می‌شود.
 
 ```razor
+@using TechUI.Mvc.Inputs
+
 @(Html.Tech().DateRangeFor<ReportModel, DateTime?, DateTime?>(
         m => m.FromDate, m => m.ToDate)
     .Placeholders("تاریخ شروع", "تاریخ پایان")
     .Min(new DateTime(2020, 1, 1))
     .Max(DateTime.Today)
     .TodayButton()
-    .ClearButton())
+    .ClearButton()
+    .Calendar(DatePickerCalendar.Both))
 
 @* بدون مدل *@
 @(Html.Tech().DateRange("ReportFrom", "ReportTo")
     .Values("2026-10-01", "2026-10-31")
+    .Calendar(DatePickerCalendar.Gregorian)
+    .Format("MM/dd/yyyy")
     .TodayButton(false))
 ```
 
@@ -639,9 +690,22 @@ picker.close();
 | --- | --- |
 | `Start(object?)` / `End(object?)` / `Values(start, end)` | مقدار اولیه |
 | `Placeholders(start, end)` | متن راهنمای دو فیلد |
-| `Format(string)` | قالب نمایشی جلالی |
+| `Format(string)` | قالب نمایشی متن فیلدها |
+| `Calendar(DatePickerCalendar)` | تقویم شمسی، میلادی یا ترکیبی |
 | `Min(DateTime)` / `Max(DateTime)` | محدوده‌ی مجاز |
 | `TodayButton` / `ClearButton` / `OpenOnFocus` | کنترل دکمه‌ها و رفتار باز شدن |
+
+`DatePickerCalendar` سه حالت دارد:
+
+| مقدار | رفتار |
+| --- | --- |
+| `Jalali` | فقط تقویم شمسی؛ دکمهٔ تغییر تقویم ندارد |
+| `Gregorian` | فقط تقویم میلادی؛ دکمهٔ تغییر تقویم ندارد |
+| `Both` (پیش‌فرض) | هر دو تقویم با دکمهٔ شمسی/میلادی |
+
+در حالت ثابت، `setCalendar` و دکمهٔ پنل کاری نمی‌کنند و تقویم روی همان حالت
+قفل می‌ماند. هر دو تقویم هفته را از شنبه شروع می‌کنند و `Min`/`Max` روی مقدار
+میلادی اعمال می‌شوند.
 
 هر دو فیلد مخفی با نام‌های مشخص‌شده به سرور ارسال می‌شوند (ISO میلادی).
 اعتبارسنجی روی فیلد شروع اعمال می‌شود.
@@ -649,14 +713,36 @@ picker.close();
 ```js
 const range = Tech.DateRangePicker.get('ReportFrom');
 
-range.value();                              // { start, end }
-range.setValue('2026-10-01', '2026-10-31');
+range.value();                                  // { start, end } به ISO میلادی
+range.setValue('2026-10-01', '2026-10-31');     // ISO میلادی
+range.calendar();                               // 'jalali' | 'gregorian'
+range.setCalendar('gregorian');                 // در حالت ثابت نادیده گرفته می‌شود
 range.open();
 range.close();
+
+Tech.DateRangePicker.value('ReportFrom');
+Tech.DateRangePicker.setCalendar('ReportFrom', 'jalali');
 ```
 
-رویداد `Change`: `{ sender, start, end }`. اگر کاربر ابتدا پایان را انتخاب کند،
-خودکار به شروع تبدیل می‌شود و تاریخ‌های معکوس جابه‌جا می‌شوند.
+همین مقدار از DOM و jQuery هم در دسترس است؛ شناسهٔ فیلد شروع روی input نمایشی
+است و مقدار میلادی در دو hidden input کنار آن قرار دارد:
+
+```js
+const root = document.querySelector('#ReportFrom')
+    .closest('.tech-daterange');
+
+root.querySelectorAll('input[type="hidden"]');   // [start, end] به ISO میلادی
+
+$('#ReportFrom').closest('.tech-daterange')
+    .find('input[type="hidden"]').map(function () { return this.value; }).get();
+
+$('.tech-daterange-start').val();                // متن نمایشی شروع
+```
+
+رویداد `Change`: `{ sender, start, end, calendar }`؛ مقادیر `start`/`end`
+همان ISO میلادی و `calendar` تقویم فعال (`jalali` یا `gregorian`) است. اگر
+کاربر ابتدا پایان را انتخاب کند، خودکار به شروع تبدیل می‌شود و تاریخ‌های معکوس
+جابه‌جا می‌شوند.
 
 ---
 
@@ -1093,6 +1179,159 @@ upload.clear();             // پاک‌کردن کل فهرست
   سرور باید همین قواعد را مستقل بررسی کند.
 - استایل‌ها از توکن‌های `--tech-*` استفاده می‌کنند و با تم تاریک،
   قالب‌های رنگی و `.tech-rtl` سازگارند.
+
+## Captcha
+
+تصویر امنیتی سمت سرور برای فرم‌ها. چالش روی سرور ساخته می‌شود، پاسخ داخل
+یک توکن رمزنگاری‌شده (AES-GCM) قرار می‌گیرد و تصویر به‌صورت SVG برمی‌گردد؛
+بنابراین بدون Session یا state سمت سرور کار می‌کند و پاسخ در HTML یا URL
+قابل خواندن نیست.
+
+### راه‌اندازی سرور
+
+در `Program.cs`:
+
+```csharp
+using TechUI.Mvc.Captcha;
+
+builder.Services.AddTechUICaptcha(options =>
+{
+    options.Secret = builder.Configuration["TechUI:Captcha:Secret"] ?? "";
+    options.ExpiresIn = TimeSpan.FromMinutes(5);
+});
+
+var app = builder.Build();
+
+app.MapTechUICaptcha();   // GET /techui/captcha
+```
+
+| گزینه | پیش‌فرض | توضیح |
+| --- | --- | --- |
+| `Secret` | خالی | کلید مشتق‌سازی AES. خالی یعنی کلید تصادفی برای هر پروسه؛ در این حالت توکن‌های صادرشده بعد از ری‌استارت برنامه بی‌اعتبار می‌شوند. در محیط عملیاتی مقدار پایدار (user-secrets یا متغیر محیطی) بدهید. |
+| `ExpiresIn` | ۵ دقیقه | عمر هر چالش؛ مقدار صفر یا منفی به ۵ دقیقه برمی‌گردد. |
+| `ImageWidth` / `ImageHeight` | `190` / `58` | ابعاد SVG؛ به ترتیب در بازهٔ ۱۴۰..۴۰۰ و ۴۴..۱۲۰ محدود می‌شوند. |
+| `Noise` | `Medium` | سطح پیش‌فرض نویز تصویر؛ هر کپچا می‌تواند با `Noise(...)` آن را بازنویسی کند. |
+
+`MapTechUICaptcha(pattern)` یک endpoint از نوع `GET` ثبت می‌کند که پاسخ JSON
+`{ token, image, expiresAt }` با هدر `Cache-Control: no-store` برمی‌گرداند و
+پارامترهای `language`, `kind`, `operation`, `length` و `noise` را می‌پذیرد.
+دکمهٔ بازخوانی تصویر از همین آدرس استفاده می‌کند.
+
+### استفاده در فرم
+
+```razor
+@using TechUI.Mvc.Captcha
+
+<form method="post">
+    @Html.AntiForgeryToken()
+
+    @(Html.Tech().Captcha("Captcha")
+        .Language(CaptchaLanguage.Persian)
+        .Kind(CaptchaKind.Letters)
+        .Length(5)
+        .Required()
+        .ValidationError(ModelState["Captcha"]?.Errors
+            .FirstOrDefault()?.ErrorMessage))
+
+    <button type="submit" class="btn btn-primary">ارسال</button>
+</form>
+```
+
+خروجی شامل تصویر، دکمهٔ «تصویر جدید»، input متنی با `name` بیلدر و یک
+input مخفی `{name}Token` است که توکن امضاشده را نگه می‌دارد. تصویر `alt` و
+متن‌های پیش‌فرض بر اساس زبان انتخاب‌شده (فارسی/انگلیسی) تعیین می‌شوند.
+
+### گزینه‌های بیلدر
+
+| متد | پیش‌فرض | توضیح |
+| --- | --- | --- |
+| `Name(string)` | نام سازنده | نام فیلد پاسخ؛ فیلد توکن `{name}Token` می‌شود |
+| `Language(CaptchaLanguage)` | `Persian` | الفبا و ارقام نمایش‌داده‌شده |
+| `Kind(CaptchaKind)` | `Letters` | نوع چالش: حروف، ارقام یا محاسبه |
+| `MathOperation(CaptchaMathOperation)` | `Addition` | عملگر چالش ریاضی |
+| `Noise(CaptchaNoiseLevel)` | پیش‌فرض سرور | میزان نویز تصویر: `None`, `Low`, `Medium`, `High` |
+| `Length(int)` | `5` | تعداد حروف/ارقام؛ به بازهٔ ۳ تا ۸ محدود می‌شود و برای `Math` نادیده گرفته می‌شود |
+| `Placeholder(string)` | متن پیش‌فرض زبان | متن راهنمای input |
+| `RefreshUrl(string)` | `/techui/captcha` | آدرس endpoint بازخوانی |
+| `CssClass(string)` / `Attribute(name, value)` | — | کلاس و ویژگی اضافه روی ریشه |
+| `Disabled(bool)` | `false` | غیرفعال‌کردن input و دکمهٔ بازخوانی |
+| `Required(bool)` | `false` | افزودن `required` به input |
+| `ValidationError(string?)` | — | نمایش پیام خطا زیر کنترل همراه با `is-invalid` و `aria-invalid` |
+
+### انواع چالش
+
+| enum | مقادیر | رفتار |
+| --- | --- | --- |
+| `CaptchaLanguage` | `Persian`, `English` | حروف فارسی/انگلیسی؛ ارقام در حالت فارسی به‌صورت ۰..۹ فارسی و در حالت انگلیسی لاتین نمایش داده می‌شوند |
+| `CaptchaKind` | `Letters`, `Digits`, `Math` | حروف تصادفی، ارقام تصادفی یا سؤال ریاضی |
+| `CaptchaMathOperation` | `Addition`, `Subtraction`, `Multiplication` | جمع (۲..۹ + ۲..۹)، تفریق (۶..۱۲ منهای عددی کوچک‌تر از آن) و ضرب (۲..۹ × ۲..۹) |
+| `CaptchaNoiseLevel` | `None`, `Low`, `Medium`, `High` | تعداد خطوط، منحنی‌ها و نقطه‌های نویز و دامنهٔ چرخش متن؛ `Medium` پیش‌فرض است و `None` تصویر کاملاً تمیز می‌دهد |
+
+حروف جداگانه و نه به‌صورت یک متن یکنواخت رسم می‌شوند: هر کاراکتر جای عمودی،
+زاویه و اندازهٔ کمی متفاوت دارد تا چیدمان قابل پیش‌بینی نباشد. با بالا رفتن
+سطح نویز، خط‌ها، منحنی‌ها و نقطه‌های بیشتری روی تصویر کشیده می‌شود و `High`
+بیشترین چگالی و جابه‌جایی را دارد.
+
+در الفبای انگلیسی حروف مبهم `I` و `O` حذف شده‌اند.
+
+### اعتبارسنجی سمت سرور
+
+```csharp
+[HttpPost]
+public async Task<IActionResult> Captcha(CaptchaSampleModel model)
+{
+    var result = await Request.ValidateTechCaptchaAsync(nameof(model.Captcha));
+
+    if (!result.IsValid)
+    {
+        ModelState.AddModelError(nameof(model.Captcha), result.Error!);
+        return View(model);
+    }
+
+    // ...
+}
+```
+
+`ValidateTechCaptcha(fieldName)` نسخهٔ همگام است (فرم را از `Request.Form`
+می‌خواند) و `ValidateTechCaptchaAsync` فرم را async می‌خواند. نام فیلد پیش‌فرض
+`"Captcha"` است. پیام‌های خطا فارسی و تفکیک‌شده‌اند: توکن نامعتبر، انقضای
+زمان، پاسخ خالی و پاسخ نادرست.
+
+پاسخ ارسالی قبل از مقایسه نرمال می‌شود: ارقام فارسی و عربی به لاتین تبدیل
+می‌شوند، فاصله و نویسه‌های ZWNJ/ZWJ حذف می‌شوند، `ي`/`ك` عربی به `ی`/`ک`
+نگاشت می‌شود و مقایسه به بزرگی/کوچکی حروف حساس نیست.
+
+### API کلاینت
+
+```js
+const captcha = Tech.Captcha.get('Captcha');
+
+captcha.answer();         // مقدار واردشده
+captcha.token();          // توکن مخفی جاری
+await captcha.refresh();  // دریافت تصویر و توکن جدید
+
+Tech.Captcha.refresh('Captcha');  // میان‌بر
+```
+
+بازخوانی، input را پاک و خطای قبلی را حذف می‌کند. خطای شبکه یا سرور با
+رویداد `Error` روی ریشه و payload `{ error }` اعلام می‌شود؛ نام تابع گیرنده
+را با `data-event-error` تنظیم کنید:
+
+```razor
+@(Html.Tech().Captcha("Captcha")
+    .Attribute("data-event-error", "onCaptchaError"))
+```
+
+### نکته‌ها
+
+- توکن stateless است؛ نیازی به Session نیست، اما در چند سرور باید `Secret`
+  مشترک تنظیم شود.
+- پاسخ داخل توکن رمزنگاری‌شده است و از DOM یا URL قابل استخراج نیست.
+- `Noise(None)` برای خوانایی بیشتر یا دسترس‌پذیری است و به‌تنهایی جلوی ربات
+  را نمی‌گیرد؛ برای فرم‌های عمومی حداقل `Low` یا `Medium` را نگه دارید.
+- کپچا جایگزین rate limiting نیست؛ endpoint ارسال فرم را همچنان محدود کنید.
+- استایل‌ها از توکن‌های `--tech-*` استفاده می‌کنند و با تم تاریک، پریست‌ها،
+  RTL و `.tech-rtl` سازگارند.
 
 ## Wizard / Stepper
 

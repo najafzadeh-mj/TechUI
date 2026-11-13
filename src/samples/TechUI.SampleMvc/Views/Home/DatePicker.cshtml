@@ -1,3 +1,4 @@
+@using TechUI.Mvc.Inputs
 @model TechUI.SampleMvc.Models.DatePickerSampleModel
 
 @{
@@ -6,7 +7,12 @@
     var submitted = ViewBag.Submitted as TechUI.SampleMvc.Models.DatePickerSampleModel;
 }
 
-<h1>انتخاب تاریخ (جلالی)</h1>
+<h1>انتخاب تاریخ (شمسی / میلادی)</h1>
+<p class="text-muted">
+    با دکمهٔ کوچک «شمسی / میلادی» داخل پنل، تقویم انتخاب را عوض کنید. مقدار ارسالی
+    به سرور و API کلاینت همیشه میلادی ISO (<code>yyyy-MM-dd</code>) است؛ فقط متن
+    نمایشی فیلد مطابق تقویم فعال تغییر می‌کند.
+</p>
 
 @if (submitted is not null)
 {
@@ -24,7 +30,9 @@
             .Placeholder("تاریخ تولد")
             .Min(new DateTime(1900, 1, 1))
             .Max(DateTime.Today)
-            .Format("yyyy/MM/dd"))
+            .Format("yyyy/MM/dd")
+            .Calendar(DatePickerCalendar.Both)
+            .Change("birthDateChanged"))
     </div>
 
     <div class="col-12">
@@ -34,9 +42,127 @@
 
 </form>
 
+<div class="card mt-4" style="max-width: 640px;">
+    <div class="card-body">
+        <h2 class="h6">حالت‌های ثابت تقویم</h2>
+        <p class="text-muted small mb-3">
+            تقویم را هنگام تعریف کامپوننت انتخاب کنید: فقط شمسی، فقط میلادی یا
+            ترکیبی. در حالت ثابت، دکمهٔ تغییر تقویم نمایش داده نمی‌شود.
+        </p>
+
+        <div class="row g-3">
+            <div class="col-12 col-sm-6">
+                <label class="form-label" for="JalaliOnly">فقط شمسی</label>
+                @(Html.Tech().DatePicker("JalaliOnly")
+                    .Calendar(DatePickerCalendar.Jalali)
+                    .Format("yyyy/MM/dd"))
+            </div>
+
+            <div class="col-12 col-sm-6">
+                <label class="form-label" for="GregorianOnly">فقط میلادی</label>
+                @(Html.Tech().DatePicker("GregorianOnly")
+                    .Calendar(DatePickerCalendar.Gregorian)
+                    .Format("MM/dd/yyyy"))
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4" style="max-width: 640px;">
+    <div class="card-body">
+        <h2 class="h6">دسترسی به مقدار میلادی</h2>
+        <p class="text-muted small mb-3">
+            این مقادیر از سه مسیر مستقل خوانده می‌شوند و همیشه میلادی هستند:
+            API جاوااسکریپت، hidden input فرم و binding مدل سمت سرور.
+        </p>
+
+        <div class="small mb-3">
+            <div class="mb-1">API کلاینت: <code id="apiValue">—</code></div>
+            <div class="mb-1">hidden input: <code id="hiddenValue">—</code></div>
+            <div class="mb-1">متن نمایشی فیلد: <code id="displayValue">—</code></div>
+            <div class="mb-1">تقویم فعال: <code id="calendarValue">—</code></div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" id="calendarJalali" class="btn btn-sm btn-outline-secondary">
+                نمایش شمسی
+            </button>
+            <button type="button" id="calendarGregorian" class="btn btn-sm btn-outline-secondary">
+                نمایش میلادی
+            </button>
+            <button type="button" id="setSampleDate" class="btn btn-sm btn-outline-primary">
+                تنظیم ۲۰۲۶-۰۳-۲۱
+            </button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
-        // مثال استفاده از API عمومی
-        // Tech.DatePicker.setValue('BirthDate', '2026-03-21');
+        (function () {
+
+            const input = document.getElementById('BirthDate');
+            const root = input ? input.closest('.tech-datepicker') : null;
+
+            if (!root) return;
+
+            const apiValue = document.getElementById('apiValue');
+            const hiddenValue = document.getElementById('hiddenValue');
+            const displayValue = document.getElementById('displayValue');
+            const calendarValue = document.getElementById('calendarValue');
+
+            function refresh() {
+
+                const picker = Tech.DatePicker.get('BirthDate');
+
+                if (!picker) return;
+
+                apiValue.textContent = picker.value() || '—';
+                hiddenValue.textContent =
+                    root.querySelector('input[type="hidden"]').value || '—';
+                displayValue.textContent =
+                    root.querySelector('input.tech-input-control').value || '—';
+                calendarValue.textContent =
+                    picker.calendar() === 'gregorian' ? 'میلادی' : 'شمسی';
+            }
+
+            window.birthDateChanged = refresh;
+
+            // دکمهٔ داخل پنل رویداد Change نمی‌فرستد (مقدار عوض نشده است).
+            root.addEventListener('click', function (event) {
+
+                if (event.target.closest('[data-action="calendar"]')) {
+                    setTimeout(refresh, 0);
+                }
+            });
+
+            document.getElementById('calendarJalali')
+                .addEventListener('click', function () {
+
+                    Tech.DatePicker.setCalendar('BirthDate', 'jalali');
+                    refresh();
+                });
+
+            document.getElementById('calendarGregorian')
+                .addEventListener('click', function () {
+
+                    Tech.DatePicker.setCalendar('BirthDate', 'gregorian');
+                    refresh();
+                });
+
+            document.getElementById('setSampleDate')
+                .addEventListener('click', function () {
+
+                    Tech.DatePicker.setValue('BirthDate', '2026-03-21');
+                    refresh();
+                });
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', refresh);
+            }
+            else {
+                refresh();
+            }
+        })();
     </script>
 }

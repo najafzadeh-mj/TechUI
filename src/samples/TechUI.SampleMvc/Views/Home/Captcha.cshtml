@@ -1,0 +1,172 @@
+@using TechUI.Mvc.Captcha
+@model TechUI.SampleMvc.Models.CaptchaSampleModel
+
+@{
+    ViewData["Title"] = "Captcha";
+
+    var captchaError = ViewData.ModelState["Captcha"]?
+        .Errors
+        .Select(error => error.ErrorMessage)
+        .FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
+}
+
+<h1>کپچا (تصویر امنیتی)</h1>
+<p class="text-muted">
+    تصویر و توکن کپچا سمت سرور ساخته می‌شوند. توکن رمزنگاری‌شده شامل پاسخ و زمان
+    انقضا است و در hidden input کنار فیلد قرار می‌گیرد؛ بنابراین اعتبارسنجی بدون
+    Session و با
+    <code>Request.ValidateTechCaptchaAsync(...)</code>
+    انجام می‌شود. زبان (فارسی/انگلیسی)، نوع (حروف/عدد/محاسبه)، عملگر
+    (جمع/تفریق/ضرب) و میزان نویز تصویر (بدون/کم/متوسط/زیاد) هنگام تعریف
+    کامپوننت انتخاب می‌شوند.
+</p>
+
+@if (ViewBag.Success == true)
+{
+    <div class="alert alert-success" style="max-width: 420px;">
+        کپچا با موفقیت تأیید شد.
+    </div>
+}
+
+<form asp-action="Captcha" method="post" class="row g-3" style="max-width: 420px;">
+
+    <div class="col-12">
+        <label class="form-label" for="Captcha">کد امنیتی (فارسی، حروف)</label>
+        @(Html.Tech().Captcha("Captcha")
+            .Language(CaptchaLanguage.Persian)
+            .Kind(CaptchaKind.Letters)
+            .Length(5)
+            .Required()
+            .ValidationError(captchaError))
+    </div>
+
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">ثبت</button>
+        <a asp-action="Captcha" class="btn btn-outline-secondary">شروع دوباره</a>
+    </div>
+
+</form>
+
+<div class="card mt-4" style="max-width: 760px;">
+    <div class="card-body">
+        <h2 class="h6">حالت‌های آماده</h2>
+        <p class="text-muted small mb-3">
+            هر نمونه توکن و تصویر مستقل دارد. با دکمهٔ کنار تصویر یا دکمهٔ
+            «رفرش همه» تصویر جدید بگیرید.
+        </p>
+
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <label class="form-label">انگلیسی، حروف</label>
+                @(Html.Tech().Captcha("EnglishLetters")
+                    .Language(CaptchaLanguage.English)
+                    .Kind(CaptchaKind.Letters)
+                    .Length(4))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">انگلیسی، عدد</label>
+                @(Html.Tech().Captcha("EnglishDigits")
+                    .Language(CaptchaLanguage.English)
+                    .Kind(CaptchaKind.Digits)
+                    .Length(4))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">فارسی، جمع</label>
+                @(Html.Tech().Captcha("MathAddition")
+                    .Language(CaptchaLanguage.Persian)
+                    .Kind(CaptchaKind.Math)
+                    .MathOperation(CaptchaMathOperation.Addition))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">انگلیسی، تفریق</label>
+                @(Html.Tech().Captcha("MathSubtraction")
+                    .Language(CaptchaLanguage.English)
+                    .Kind(CaptchaKind.Math)
+                    .MathOperation(CaptchaMathOperation.Subtraction))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">فارسی، ضرب</label>
+                @(Html.Tech().Captcha("MathMultiplication")
+                    .Language(CaptchaLanguage.Persian)
+                    .Kind(CaptchaKind.Math)
+                    .MathOperation(CaptchaMathOperation.Multiplication))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">انگلیسی، نویز زیاد</label>
+                @(Html.Tech().Captcha("NoiseHigh")
+                    .Language(CaptchaLanguage.English)
+                    .Kind(CaptchaKind.Letters)
+                    .Length(5)
+                    .Noise(CaptchaNoiseLevel.High))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">فارسی، بدون نویز</label>
+                @(Html.Tech().Captcha("NoiseNone")
+                    .Language(CaptchaLanguage.Persian)
+                    .Kind(CaptchaKind.Digits)
+                    .Length(4)
+                    .Noise(CaptchaNoiseLevel.None))
+            </div>
+
+            <div class="col-12 col-md-6 d-flex align-items-end">
+                <button type="button" id="refreshAll" class="btn btn-outline-primary">
+                    رفرش همه
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4" style="max-width: 760px;">
+    <div class="card-body">
+        <h2 class="h6">API کلاینت</h2>
+        <div class="small mb-2">
+            <code>Tech.Captcha.refresh('Captcha')</code> — تصویر و توکن جدید
+        </div>
+        <div class="small mb-2">
+            <code>Tech.Captcha.token('Captcha')</code> — توکن فعلی فرم
+        </div>
+        <div class="small">
+            <code>Tech.Captcha.get('Captcha')</code> — دسترسی به instance
+        </div>
+
+        <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" id="readToken" class="btn btn-sm btn-outline-secondary">
+                خواندن توکن
+            </button>
+            <span class="small text-muted">
+                طول توکن: <code id="tokenLength">—</code>
+            </span>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('refreshAll').addEventListener('click', function () {
+
+            ['Captcha', 'EnglishLetters', 'EnglishDigits',
+                'MathAddition', 'MathSubtraction', 'MathMultiplication',
+                'NoiseHigh', 'NoiseNone']
+                .forEach(function (id) {
+                    Tech.Captcha.refresh(id);
+                });
+
+            Tech.notify('تصویر کپچاها تازه شد.', { type: 'success' });
+        });
+
+        document.getElementById('readToken').addEventListener('click', function () {
+
+            const token = Tech.Captcha.token('Captcha');
+
+            document.getElementById('tokenLength').textContent =
+                token ? token.length : '—';
+        });
+    </script>
+}

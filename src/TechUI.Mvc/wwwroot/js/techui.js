@@ -4095,6 +4095,11 @@ const techJalaliWeekDays = [
     'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'
 ];
 
+const techGregorianMonthNames = [
+    'ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن',
+    'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر'
+];
+
 function techDiv(a, b) {
     return Math.trunc(a / b);
 }
@@ -4264,6 +4269,54 @@ function techFormatJalali(jy, jm, jd, format) {
         .replace(/dd/g, techPad(jd));
 }
 
+function techFormatGregorian(gy, gm, gd, format) {
+
+    return (format || 'yyyy/MM/dd')
+        .replace(/yyyy/g, String(gy))
+        .replace(/MM/g, techPad(gm))
+        .replace(/dd/g, techPad(gd));
+}
+
+function techGregorianDate(gy, gm, gd) {
+
+    const date = new Date(0);
+
+    date.setHours(0, 0, 0, 0);
+    date.setFullYear(gy, gm - 1, gd);
+
+    return date;
+}
+
+function techDatePickerMode(root) {
+
+    return root._techDateState && root._techDateState.mode === 'gregorian'
+        ? 'gregorian'
+        : 'jalali';
+}
+
+function techCalendarOption(root) {
+
+    const calendar = String(root.dataset.calendar || '').toLowerCase();
+
+    return calendar === 'jalali' || calendar === 'gregorian'
+        ? calendar
+        : 'both';
+}
+
+function techDatePickerDisplay(root, parts) {
+
+    if (techDatePickerMode(root) === 'gregorian') {
+
+        return techFormatGregorian(
+            parts.y, parts.m, parts.d, root.dataset.format);
+    }
+
+    const jalali = techGregorianToJalali(parts.y, parts.m, parts.d);
+
+    return techFormatJalali(
+        jalali.jy, jalali.jm, jalali.jd, root.dataset.format);
+}
+
 Tech.DatePicker = Tech.DatePicker || {};
 Tech.DatePicker.instances = Tech.DatePicker.instances || new Map();
 
@@ -4285,6 +4338,20 @@ Tech.DatePicker.setValue = function (id, iso) {
     if (instance) instance.setValue(iso);
 };
 
+Tech.DatePicker.calendar = function (id) {
+
+    const instance = Tech.DatePicker.get(id);
+
+    return instance ? instance.calendar() : null;
+};
+
+Tech.DatePicker.setCalendar = function (id, mode) {
+
+    const instance = Tech.DatePicker.get(id);
+
+    if (instance) instance.setCalendar(mode);
+};
+
 function techRenderDatePicker(root, state) {
 
     const panel = root.querySelector('.tech-datepicker-panel');
@@ -4294,24 +4361,50 @@ function techRenderDatePicker(root, state) {
 
     const iso = hidden.value || '';
     const today = new Date();
-    const todayJ = techGregorianToJalali(
+    const todayIso = techIsoDate(
         today.getFullYear(), today.getMonth() + 1, today.getDate());
 
-    const length = techJalaliMonthLength(state.jy, state.jm);
-    const first = techJalaliToGregorian(state.jy, state.jm, 1);
-
-    const offset = (new Date(first.gy, first.gm - 1, first.gd)
-        .getDay() - 6 + 7) % 7;
-
+    const mode = state.mode === 'gregorian' ? 'gregorian' : 'jalali';
     const min = root.dataset.min || '';
     const max = root.dataset.max || '';
 
-    let html = '<div class="tech-dp-header">'
-        + '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
+    let title;
+    let length;
+    let offset;
+
+    if (mode === 'gregorian') {
+
+        length = techGregorianDate(state.gy, state.gm + 1, 0).getDate();
+        offset = (techGregorianDate(state.gy, state.gm, 1).getDay() + 1) % 7;
+        title = techGregorianMonthNames[state.gm - 1] + ' ' + state.gy;
+    }
+    else {
+
+        length = techJalaliMonthLength(state.jy, state.jm);
+
+        const first = techJalaliToGregorian(state.jy, state.jm, 1);
+
+        offset = (new Date(first.gy, first.gm - 1, first.gd)
+            .getDay() - 6 + 7) % 7;
+        title = techJalaliMonthNames[state.jm - 1] + ' ' + state.jy;
+    }
+
+    let html = '<div class="tech-dp-header">';
+
+    if (techCalendarOption(root) === 'both') {
+
+        const label = mode === 'gregorian' ? 'میلادی' : 'شمسی';
+        const next = mode === 'gregorian' ? 'شمسی' : 'میلادی';
+
+        html += '<button type="button" class="tech-dp-mode" data-action="calendar"'
+            + ' title="تغییر به تقویم ' + next + '"'
+            + ' aria-label="تقویم ' + label + '؛ تغییر به تقویم ' + next + '">'
+            + label + '</button>';
+    }
+
+    html += '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
         + '<button type="button" class="tech-dp-nav" data-nav="pm" aria-label="ماه قبل">‹</button>'
-        + '<span class="tech-dp-title">'
-        + techJalaliMonthNames[state.jm - 1] + ' ' + state.jy
-        + '</span>'
+        + '<span class="tech-dp-title">' + title + '</span>'
         + '<button type="button" class="tech-dp-nav" data-nav="nm" aria-label="ماه بعد">›</button>'
         + '<button type="button" class="tech-dp-nav" data-nav="ny" aria-label="سال بعد">»</button>'
         + '</div>';
@@ -4335,9 +4428,17 @@ function techRenderDatePicker(root, state) {
 
         if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
 
-        const gregorian = techJalaliToGregorian(state.jy, state.jm, day);
-        const dayIso = techIsoDate(
-            gregorian.gy, gregorian.gm, gregorian.gd);
+        let dayIso;
+
+        if (mode === 'gregorian') {
+            dayIso = techIsoDate(state.gy, state.gm, day);
+        }
+        else {
+            const gregorian = techJalaliToGregorian(state.jy, state.jm, day);
+
+            dayIso = techIsoDate(
+                gregorian.gy, gregorian.gm, gregorian.gd);
+        }
 
         const classes = ['tech-dp-day'];
 
@@ -4345,11 +4446,7 @@ function techRenderDatePicker(root, state) {
 
         if (dayIso === iso) classes.push('is-selected');
 
-        if (state.jy === todayJ.jy &&
-            state.jm === todayJ.jm &&
-            day === todayJ.jd) {
-            classes.push('is-today');
-        }
+        if (dayIso === todayIso) classes.push('is-today');
 
         if ((min && dayIso < min) || (max && dayIso > max)) {
             classes.push('is-disabled');
@@ -4396,23 +4493,65 @@ function techSetDatePickerValue(root, iso, fire) {
     const parts = techIsoParts(iso);
 
     hidden.value = parts ? iso : '';
-
-    if (parts) {
-
-        const jalali = techGregorianToJalali(parts.y, parts.m, parts.d);
-
-        input.value = techFormatJalali(
-            jalali.jy, jalali.jm, jalali.jd, root.dataset.format);
-    }
-    else {
-        input.value = '';
-    }
+    input.value = parts ? techDatePickerDisplay(root, parts) : '';
 
     if (fire) {
         Tech.trigger(root, 'Change', {
             sender: input,
-            value: hidden.value
+            value: hidden.value,
+            display: input.value,
+            calendar: techDatePickerMode(root)
         });
+    }
+}
+
+function techSetDatePickerCalendar(root, mode) {
+
+    const state = root._techDateState;
+
+    if (!state) return;
+
+    const calendar = techCalendarOption(root);
+
+    const next = calendar === 'both'
+        ? (mode === 'gregorian' ? 'gregorian' : 'jalali')
+        : calendar;
+
+    if (state.mode === next) return;
+
+    const hidden = root.querySelector('input[type="hidden"]');
+    const input = root.querySelector('input.tech-input-control');
+
+    const selected = techIsoParts(hidden ? hidden.value : '');
+    const today = new Date();
+
+    const anchor = selected || {
+        y: today.getFullYear(),
+        m: today.getMonth() + 1,
+        d: today.getDate()
+    };
+
+    state.mode = next;
+
+    if (next === 'gregorian') {
+        state.gy = anchor.y;
+        state.gm = anchor.m;
+    }
+    else {
+        const jalali = techGregorianToJalali(anchor.y, anchor.m, anchor.d);
+
+        state.jy = jalali.jy;
+        state.jm = jalali.jm;
+    }
+
+    if (hidden && input) {
+        const parts = techIsoParts(hidden.value);
+
+        input.value = parts ? techDatePickerDisplay(root, parts) : '';
+    }
+
+    if (root.classList.contains('open')) {
+        techRenderDatePicker(root, state);
     }
 }
 
@@ -4430,10 +4569,21 @@ function techOpenDatePicker(root) {
         });
 
     const selected = techIsoParts(hidden.value);
+    const today = new Date();
 
-    if (selected) {
+    const anchor = selected || {
+        y: today.getFullYear(),
+        m: today.getMonth() + 1,
+        d: today.getDate()
+    };
+
+    if (state.mode === 'gregorian') {
+        state.gy = anchor.y;
+        state.gm = anchor.m;
+    }
+    else {
         const jalali = techGregorianToJalali(
-            selected.y, selected.m, selected.d);
+            anchor.y, anchor.m, anchor.d);
 
         state.jy = jalali.jy;
         state.jm = jalali.jm;
@@ -4477,7 +4627,15 @@ function initDatePicker(root) {
     const todayJ = techGregorianToJalali(
         today.getFullYear(), today.getMonth() + 1, today.getDate());
 
-    root._techDateState = { jy: todayJ.jy, jm: todayJ.jm };
+    root._techDateState = {
+        mode: techCalendarOption(root) === 'gregorian'
+            ? 'gregorian'
+            : 'jalali',
+        jy: todayJ.jy,
+        jm: todayJ.jm,
+        gy: today.getFullYear(),
+        gm: today.getMonth() + 1
+    };
 
     const initial = hidden.value || root.dataset.value || '';
 
@@ -4524,25 +4682,50 @@ function initDatePicker(root) {
 
             const state = root._techDateState;
 
-            switch (nav.dataset.nav) {
-                case 'pm':
-                    state.jm--;
-                    if (state.jm < 1) { state.jm = 12; state.jy--; }
-                    break;
-                case 'nm':
-                    state.jm++;
-                    if (state.jm > 12) { state.jm = 1; state.jy++; }
-                    break;
-                case 'py':
-                    state.jy--;
-                    break;
-                case 'ny':
-                    state.jy++;
-                    break;
-            }
+            if (state.mode === 'gregorian') {
 
-            if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
-            if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
+                switch (nav.dataset.nav) {
+                    case 'pm':
+                        state.gm--;
+                        if (state.gm < 1) { state.gm = 12; state.gy--; }
+                        break;
+                    case 'nm':
+                        state.gm++;
+                        if (state.gm > 12) { state.gm = 1; state.gy++; }
+                        break;
+                    case 'py':
+                        state.gy--;
+                        break;
+                    case 'ny':
+                        state.gy++;
+                        break;
+                }
+
+                if (state.gy < 1) { state.gy = 1; state.gm = 1; }
+                if (state.gy > 9999) { state.gy = 9999; state.gm = 12; }
+            }
+            else {
+
+                switch (nav.dataset.nav) {
+                    case 'pm':
+                        state.jm--;
+                        if (state.jm < 1) { state.jm = 12; state.jy--; }
+                        break;
+                    case 'nm':
+                        state.jm++;
+                        if (state.jm > 12) { state.jm = 1; state.jy++; }
+                        break;
+                    case 'py':
+                        state.jy--;
+                        break;
+                    case 'ny':
+                        state.jy++;
+                        break;
+                }
+
+                if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
+                if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
+            }
 
             techRenderDatePicker(root, state);
 
@@ -4570,6 +4753,17 @@ function initDatePicker(root) {
 
         if (!action) return;
 
+        if (action.dataset.action === 'calendar') {
+
+            techSetDatePickerCalendar(
+                root,
+                techDatePickerMode(root) === 'gregorian'
+                    ? 'jalali'
+                    : 'gregorian');
+
+            return;
+        }
+
         if (action.dataset.action === 'today') {
 
             techSetDatePickerValue(
@@ -4593,6 +4787,8 @@ function initDatePicker(root) {
         setValue: function (iso) {
             techSetDatePickerValue(root, iso || '', true);
         },
+        calendar: function () { return techDatePickerMode(root); },
+        setCalendar: function (mode) { techSetDatePickerCalendar(root, mode); },
         open: open,
         close: function () { techCloseDatePicker(root); }
     });
@@ -4626,11 +4822,70 @@ Tech.DateRangePicker.setValue = function (id, startIso, endIso) {
     if (instance) instance.setValue(startIso, endIso);
 };
 
+Tech.DateRangePicker.calendar = function (id) {
+
+    const instance = Tech.DateRangePicker.get(id);
+
+    return instance ? instance.calendar() : null;
+};
+
+Tech.DateRangePicker.setCalendar = function (id, mode) {
+
+    const instance = Tech.DateRangePicker.get(id);
+
+    if (instance) instance.setCalendar(mode);
+};
+
+function techDateRangeMode(root) {
+
+    return root._techRangeState && root._techRangeState.mode === 'gregorian'
+        ? 'gregorian'
+        : 'jalali';
+}
+
+function techRangeDayIso(mode, year, month, day) {
+
+    if (mode === 'gregorian') {
+
+        return techIsoDate(year, month, day);
+    }
+
+    const gregorian = techJalaliToGregorian(year, month, day);
+
+    return techIsoDate(gregorian.gy, gregorian.gm, gregorian.gd);
+}
+
+function techRangeMonthLength(mode, year, month) {
+
+    return mode === 'gregorian'
+        ? techGregorianDate(year, month + 1, 0).getDate()
+        : techJalaliMonthLength(year, month);
+}
+
+function techRangeMonthOffset(mode, year, month) {
+
+    if (mode === 'gregorian') {
+
+        return (techGregorianDate(year, month, 1).getDay() + 1) % 7;
+    }
+
+    const first = techJalaliToGregorian(year, month, 1);
+
+    return (new Date(first.gy, first.gm - 1, first.gd)
+        .getDay() - 6 + 7) % 7;
+}
+
 function techRangeDisplay(root, iso) {
 
     const parts = techIsoParts(iso);
 
     if (!parts) return '';
+
+    if (techDateRangeMode(root) === 'gregorian') {
+
+        return techFormatGregorian(
+            parts.y, parts.m, parts.d, root.dataset.format);
+    }
 
     const jalali = techGregorianToJalali(parts.y, parts.m, parts.d);
 
@@ -4649,11 +4904,10 @@ function techRenderDateRange(root) {
     const todayIso = techIsoDate(
         today.getFullYear(), today.getMonth() + 1, today.getDate());
 
-    const todayJ = techGregorianToJalali(
-        today.getFullYear(), today.getMonth() + 1, today.getDate());
-
     const min = root.dataset.min || '';
     const max = root.dataset.max || '';
+
+    const mode = techDateRangeMode(root);
 
     const start = state.start;
     const end = state.end;
@@ -4664,24 +4918,40 @@ function techRenderDateRange(root) {
 
     for (let index = 0; index < 2; index++) {
 
-        let jy = state.jy;
-        let jm = state.jm + index;
+        let year = mode === 'gregorian' ? state.gy : state.jy;
+        let month = (mode === 'gregorian' ? state.gm : state.jm) + index;
 
-        while (jm > 12) {
-            jm -= 12;
-            jy++;
+        while (month > 12) {
+            month -= 12;
+            year++;
         }
 
-        months.push({ jy: jy, jm: jm });
+        months.push({ year: year, month: month });
     }
 
-    let html = '<div class="tech-dr-header">'
-        + '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
+    const monthNames = mode === 'gregorian'
+        ? techGregorianMonthNames
+        : techJalaliMonthNames;
+
+    let html = '<div class="tech-dr-header">';
+
+    if (techCalendarOption(root) === 'both') {
+
+        const label = mode === 'gregorian' ? 'میلادی' : 'شمسی';
+        const next = mode === 'gregorian' ? 'شمسی' : 'میلادی';
+
+        html += '<button type="button" class="tech-dp-mode" data-action="calendar"'
+            + ' title="تغییر به تقویم ' + next + '"'
+            + ' aria-label="تقویم ' + label + '؛ تغییر به تقویم ' + next + '">'
+            + label + '</button>';
+    }
+
+    html += '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
         + '<button type="button" class="tech-dp-nav" data-nav="pm" aria-label="ماه قبل">‹</button>'
         + '<span class="tech-dp-title">'
-        + techJalaliMonthNames[months[0].jm - 1] + ' ' + months[0].jy
+        + monthNames[months[0].month - 1] + ' ' + months[0].year
         + ' – '
-        + techJalaliMonthNames[months[1].jm - 1] + ' ' + months[1].jy
+        + monthNames[months[1].month - 1] + ' ' + months[1].year
         + '</span>'
         + '<button type="button" class="tech-dp-nav" data-nav="nm" aria-label="ماه بعد">›</button>'
         + '<button type="button" class="tech-dp-nav" data-nav="ny" aria-label="سال بعد">»</button>'
@@ -4691,11 +4961,11 @@ function techRenderDateRange(root) {
 
     months.forEach(function (month) {
 
-        const length = techJalaliMonthLength(month.jy, month.jm);
-        const first = techJalaliToGregorian(month.jy, month.jm, 1);
+        const length = techRangeMonthLength(
+            mode, month.year, month.month);
 
-        const offset = (new Date(first.gy, first.gm - 1, first.gd)
-            .getDay() - 6 + 7) % 7;
+        const offset = techRangeMonthOffset(
+            mode, month.year, month.month);
 
         html += '<div class="tech-dr-month">'
             + '<table class="tech-dp-grid"><thead><tr>';
@@ -4716,11 +4986,8 @@ function techRenderDateRange(root) {
 
             if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
 
-            const gregorian = techJalaliToGregorian(
-                month.jy, month.jm, day);
-
-            const dayIso = techIsoDate(
-                gregorian.gy, gregorian.gm, gregorian.gd);
+            const dayIso = techRangeDayIso(
+                mode, month.year, month.month, day);
 
             const classes = ['tech-dp-day'];
 
@@ -4734,9 +5001,7 @@ function techRenderDateRange(root) {
                 classes.push('is-in-range');
             }
 
-            if (month.jy === todayJ.jy &&
-                month.jm === todayJ.jm &&
-                day === todayJ.jd) {
+            if (dayIso === todayIso) {
                 classes.push('is-today');
             }
 
@@ -4828,8 +5093,56 @@ function techSetDateRangeValue(root, startIso, endIso, fire) {
         Tech.trigger(root, 'Change', {
             sender: startInput,
             start: start,
-            end: end
+            end: end,
+            calendar: techDateRangeMode(root)
         });
+    }
+}
+
+function techSetDateRangeCalendar(root, mode) {
+
+    const state = root._techRangeState;
+
+    if (!state) return;
+
+    const calendar = techCalendarOption(root);
+
+    const next = calendar === 'both'
+        ? (mode === 'gregorian' ? 'gregorian' : 'jalali')
+        : calendar;
+
+    if (state.mode === next) return;
+
+    const today = new Date();
+    const selected = techIsoParts(state.start);
+
+    const anchor = selected || {
+        y: today.getFullYear(),
+        m: today.getMonth() + 1,
+        d: today.getDate()
+    };
+
+    state.mode = next;
+
+    if (next === 'gregorian') {
+        state.gy = anchor.y;
+        state.gm = anchor.m;
+    }
+    else {
+        const jalali = techGregorianToJalali(anchor.y, anchor.m, anchor.d);
+
+        state.jy = jalali.jy;
+        state.jm = jalali.jm;
+    }
+
+    const startInput = root.querySelector('.tech-daterange-start');
+    const endInput = root.querySelector('.tech-daterange-end');
+
+    if (startInput) startInput.value = techRangeDisplay(root, state.start);
+    if (endInput) endInput.value = techRangeDisplay(root, state.end);
+
+    if (root.classList.contains('open')) {
+        techRenderDateRange(root);
     }
 }
 
@@ -4852,11 +5165,17 @@ function techOpenDateRange(root) {
 
     if (selected) {
 
-        const jalali = techGregorianToJalali(
-            selected.y, selected.m, selected.d);
+        if (state.mode === 'gregorian') {
+            state.gy = selected.y;
+            state.gm = selected.m;
+        }
+        else {
+            const jalali = techGregorianToJalali(
+                selected.y, selected.m, selected.d);
 
-        state.jy = jalali.jy;
-        state.jm = jalali.jm;
+            state.jy = jalali.jy;
+            state.jm = jalali.jm;
+        }
     }
 
     techRenderDateRange(root);
@@ -4904,8 +5223,13 @@ function initDateRangePicker(root) {
         today.getFullYear(), today.getMonth() + 1, today.getDate());
 
     root._techRangeState = {
+        mode: techCalendarOption(root) === 'gregorian'
+            ? 'gregorian'
+            : 'jalali',
         jy: todayJ.jy,
         jm: todayJ.jm,
+        gy: today.getFullYear(),
+        gm: today.getMonth() + 1,
         start: null,
         end: null,
         hover: null
@@ -4961,25 +5285,50 @@ function initDateRangePicker(root) {
 
             const state = root._techRangeState;
 
-            switch (nav.dataset.nav) {
-                case 'pm':
-                    state.jm--;
-                    if (state.jm < 1) { state.jm = 12; state.jy--; }
-                    break;
-                case 'nm':
-                    state.jm++;
-                    if (state.jm > 12) { state.jm = 1; state.jy++; }
-                    break;
-                case 'py':
-                    state.jy--;
-                    break;
-                case 'ny':
-                    state.jy++;
-                    break;
-            }
+            if (state.mode === 'gregorian') {
 
-            if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
-            if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
+                switch (nav.dataset.nav) {
+                    case 'pm':
+                        state.gm--;
+                        if (state.gm < 1) { state.gm = 12; state.gy--; }
+                        break;
+                    case 'nm':
+                        state.gm++;
+                        if (state.gm > 12) { state.gm = 1; state.gy++; }
+                        break;
+                    case 'py':
+                        state.gy--;
+                        break;
+                    case 'ny':
+                        state.gy++;
+                        break;
+                }
+
+                if (state.gy < 1) { state.gy = 1; state.gm = 1; }
+                if (state.gy > 9999) { state.gy = 9999; state.gm = 12; }
+            }
+            else {
+
+                switch (nav.dataset.nav) {
+                    case 'pm':
+                        state.jm--;
+                        if (state.jm < 1) { state.jm = 12; state.jy--; }
+                        break;
+                    case 'nm':
+                        state.jm++;
+                        if (state.jm > 12) { state.jm = 1; state.jy++; }
+                        break;
+                    case 'py':
+                        state.jy--;
+                        break;
+                    case 'ny':
+                        state.jy++;
+                        break;
+                }
+
+                if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
+                if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
+            }
 
             techRenderDateRange(root);
 
@@ -5025,6 +5374,17 @@ function initDateRangePicker(root) {
         const action = ev.target.closest('[data-action]');
 
         if (!action) return;
+
+        if (action.dataset.action === 'calendar') {
+
+            techSetDateRangeCalendar(
+                root,
+                techDateRangeMode(root) === 'gregorian'
+                    ? 'jalali'
+                    : 'gregorian');
+
+            return;
+        }
 
         if (action.dataset.action === 'today') {
 
@@ -5084,6 +5444,8 @@ function initDateRangePicker(root) {
 
             techRenderDateRange(root);
         },
+        calendar: function () { return techDateRangeMode(root); },
+        setCalendar: function (mode) { techSetDateRangeCalendar(root, mode); },
         open: open,
         close: function () { techCloseDateRange(root); }
     });
@@ -10561,6 +10923,155 @@ Tech.register('fileupload', function (root) {
         Tech.FileUpload.instances.set(root.id || root, root._techFileUpload);
     }
 });
+
+// ============================================================
+// Captcha
+// ============================================================
+
+Tech.Captcha = Tech.Captcha || {};
+Tech.Captcha.instances = Tech.Captcha.instances || new Map();
+
+Tech.Captcha.get = function (id) {
+
+    return Tech.Captcha.instances.get(id) || null;
+};
+
+Tech.Captcha.refresh = function (id) {
+
+    const instance = Tech.Captcha.get(id);
+
+    return instance ? instance.refresh() : null;
+};
+
+Tech.Captcha.token = function (id) {
+
+    const instance = Tech.Captcha.get(id);
+
+    return instance ? instance.token() : null;
+};
+
+function techCaptchaParams(root) {
+
+    const params = new URLSearchParams();
+
+    params.set('language', root.dataset.language || 'fa');
+    params.set('kind', root.dataset.kind || 'letters');
+
+    if (root.dataset.noise) {
+        params.set('noise', root.dataset.noise);
+    }
+
+    if (root.dataset.kind === 'math') {
+        params.set('operation', root.dataset.operation || 'addition');
+    }
+    else if (root.dataset.length) {
+        params.set('length', root.dataset.length);
+    }
+
+    return params;
+}
+
+function techCaptchaClearError(root, input) {
+
+    if (input) {
+        input.classList.remove('is-invalid');
+        input.removeAttribute('aria-invalid');
+    }
+
+    const error = root.querySelector('.tech-captcha-error');
+
+    if (error) error.hidden = true;
+}
+
+function techCaptchaRefresh(root) {
+
+    const input = root.querySelector('.tech-captcha-answer');
+    const hidden = root.querySelector('input[type="hidden"]');
+    const image = root.querySelector('.tech-captcha-image');
+    const button = root.querySelector('.tech-captcha-refresh');
+    const url = root.dataset.refreshUrl || '/techui/captcha';
+    const separator = url.indexOf('?') >= 0 ? '&' : '?';
+
+    if (!hidden || !image) return Promise.resolve(null);
+
+    if (button) button.disabled = true;
+
+    root.classList.add('is-loading');
+
+    return fetch(url + separator + techCaptchaParams(root).toString(), {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin'
+    })
+        .then(function (response) {
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            return response.json();
+        })
+        .then(function (data) {
+
+            if (!data || !data.token || !data.image) return null;
+
+            hidden.value = data.token;
+            image.src = data.image;
+
+            if (input) {
+                input.value = '';
+                techCaptchaClearError(root, input);
+            }
+
+            return data;
+        })
+        .catch(function (error) {
+
+            Tech.trigger(root, 'Error', { error: error });
+
+            return null;
+        })
+        .finally(function () {
+
+            if (button) button.disabled = false;
+
+            root.classList.remove('is-loading');
+        });
+}
+
+function initCaptcha(root) {
+
+    if (root._techCaptchaReady) return;
+
+    root._techCaptchaReady = true;
+
+    const input = root.querySelector('.tech-captcha-answer');
+    const hidden = root.querySelector('input[type="hidden"]');
+    const button = root.querySelector('.tech-captcha-refresh');
+
+    if (!input || !hidden) return;
+
+    if (button) {
+        button.addEventListener('click', function () {
+
+            techCaptchaRefresh(root).then(function () {
+                input.focus();
+            });
+        });
+    }
+
+    input.addEventListener('input', function () {
+        techCaptchaClearError(root, input);
+    });
+
+    Tech.Captcha.instances.set(input.id || root.id, {
+        element: root,
+        answer: function () { return input.value; },
+        token: function () { return hidden.value; },
+        refresh: function () { return techCaptchaRefresh(root); }
+    });
+}
+
+Tech.register('captcha', initCaptcha);
 
 // ============================================================
 // Toast / notifications

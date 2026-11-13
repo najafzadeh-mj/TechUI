@@ -133,8 +133,9 @@ the library is a GET endpoint called with `?type=image|file`.
 
 Grid, DropDownList, TextBox, TextArea, NumericTextBox, MaskedTextBox, Editor,
 CheckBox, RadioButton, DatePicker, DateRangePicker, TimePicker, MultiSelect /
-Tag Input, Tabs, Accordion, TreeView, DropDownTree, FileUpload, Wizard / Stepper,
-Timeline, Breadcrumb, Chat, Chart (23 types), Spinner, Toast and Dialog. The
+Tag Input, Tabs, Accordion, TreeView, DropDownTree, FileUpload, Captcha,
+Wizard / Stepper, Timeline, Breadcrumb, Chat, Chart (23 types), Spinner, Toast
+and Dialog. The
 standalone Chat panel works as an AI assistant or a human support inbox, and the
 Grid also offers an optional assistant chat panel backed by your own endpoint —
 TechUI ships no AI dependency; see

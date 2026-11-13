@@ -7,6 +7,7 @@ namespace TechUI.Mvc.Inputs
     public sealed class DateRangePickerBuilder : InputBuilderBase<DateRangePickerBuilder>
     {
         private readonly string _endName;
+        private DatePickerCalendar _calendar = DatePickerCalendar.Both;
         private string _format = "yyyy/MM/dd";
         private string _startPlaceholder = "تاریخ شروع";
         private string _endPlaceholder = "تاریخ پایان";
@@ -33,6 +34,12 @@ namespace TechUI.Mvc.Inputs
                 _format = format.Trim();
             }
 
+            return this;
+        }
+
+        public DateRangePickerBuilder Calendar(DatePickerCalendar calendar)
+        {
+            _calendar = calendar;
             return this;
         }
 
@@ -111,6 +118,12 @@ namespace TechUI.Mvc.Inputs
             var wrapper = CreateWrapper("daterange", "tech-daterange");
 
             wrapper.Attributes["data-format"] = _format;
+            wrapper.Attributes["data-calendar"] = _calendar switch
+            {
+                DatePickerCalendar.Jalali => "jalali",
+                DatePickerCalendar.Gregorian => "gregorian",
+                _ => "both"
+            };
             wrapper.Attributes["data-today"] =
                 _todayButton.ToString().ToLowerInvariant();
             wrapper.Attributes["data-clear"] =

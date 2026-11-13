@@ -10,7 +10,8 @@ TagHelpers, and Persian-first defaults.
 - Client + server validation from DataAnnotations and `ModelState`.
 - Grid, DropDownList, MultiSelect/Tag Input, inputs, editor, tabs, accordion,
   tree view, dropdown tree, wizard/stepper, timeline, breadcrumb, file upload,
-  spinner, toast, dialog and dependency-free SVG charts (23 chart types).
+  captcha, spinner, toast, dialog and dependency-free SVG charts (23 chart
+  types).
 - Standalone Chat panel with assistant (single request/reply) and support
   (deliver + poll or realtime push) modes; styled by the active theme tokens.
 - Optional Grid assistant chat panel with a provider-agnostic request/response
@@ -62,6 +63,15 @@ use Bootstrap's own interactive components.
 @(Html.Tech().DatePickerFor<MyModel, DateTime?>(m => m.BirthDate)
     .Max(DateTime.Today))
 ```
+
+Users can switch the DatePicker between the Jalali and Gregorian month views
+with the small toggle inside the panel. Pick the allowed calendars at
+definition time with `Calendar(DatePickerCalendar.Jalali)`, `.Gregorian` or
+`.Both` (default); fixed modes hide the toggle. The hidden form input,
+`Tech.DatePicker.value()` and the `Change` payload always stay Gregorian ISO
+(`yyyy-MM-dd`), so server model binding needs no conversion. `DateRangePicker`
+accepts the same `Calendar(...)` option and keeps both range hidden inputs in
+Gregorian ISO.
 
 Components boot from `data-tech-component` on `DOMContentLoaded`; call
 `Tech.boot()` after injecting markup dynamically.
@@ -153,6 +163,41 @@ successful JSON response stores `id`/`value`/`name` in a hidden input named
 after the builder. Without `Url`, selections post natively with the form.
 Client API: `Tech.FileUpload.get('attachments').upload()`, `.clear()`,
 `.getFiles()`.
+
+## Captcha
+
+```csharp
+// Program.cs
+builder.Services.AddTechUICaptcha(options =>
+{
+    options.Secret = builder.Configuration["TechUI:Captcha:Secret"] ?? "";
+});
+
+app.MapTechUICaptcha(); // GET /techui/captcha
+```
+
+```razor
+@using TechUI.Mvc.Captcha
+
+@(Html.Tech().Captcha("Captcha")
+    .Language(CaptchaLanguage.Persian)
+    .Kind(CaptchaKind.Letters)
+    .Noise(CaptchaNoiseLevel.Medium)
+    .Length(5)
+    .Required())
+```
+
+Server-generated SVG images with an AES-GCM encrypted token, so no session
+state is needed. Kinds are letters, digits or arithmetic
+(`CaptchaMathOperation.Addition|Subtraction|Multiplication`), in Persian or
+English. Noise is configurable per instance (`CaptchaNoiseLevel.None|Low|Medium|High`)
+or globally through `TechCaptchaOptions.Noise` (default `Medium`). Glyphs are
+drawn individually with random vertical offsets, rotation and size, and higher
+noise levels add more lines, curves and dots. The refresh
+button pulls a new challenge from `MapTechUICaptcha`;
+validate posts with `await Request.ValidateTechCaptchaAsync(nameof(model.Captcha))`.
+Set a stable `Secret` or outstanding tokens die on restart. Client API:
+`Tech.Captcha.get('Captcha').refresh()`, `.token()`.
 
 ## Wizard / Stepper
 
