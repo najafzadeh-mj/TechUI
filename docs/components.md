@@ -1228,6 +1228,7 @@ app.MapTechUICaptcha();   // GET /techui/captcha
     @(Html.Tech().Captcha("Captcha")
         .Language(CaptchaLanguage.Persian)
         .Kind(CaptchaKind.Letters)
+        .Noise(CaptchaNoiseLevel.Medium)
         .Length(5)
         .Required()
         .ValidationError(ModelState["Captcha"]?.Errors
@@ -1313,7 +1314,8 @@ await captcha.refresh();  // دریافت تصویر و توکن جدید
 Tech.Captcha.refresh('Captcha');  // میان‌بر
 ```
 
-بازخوانی، input را پاک و خطای قبلی را حذف می‌کند. خطای شبکه یا سرور با
+بازخوانی، input را پاک و خطای قبلی را حذف می‌کند و زبان، نوع چالش و سطح
+نویز را از `data-*` همان کنترل حفظ می‌کند. خطای شبکه یا سرور با
 رویداد `Error` روی ریشه و payload `{ error }` اعلام می‌شود؛ نام تابع گیرنده
 را با `data-event-error` تنظیم کنید:
 

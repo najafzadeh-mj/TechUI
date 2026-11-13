@@ -193,8 +193,8 @@ state is needed. Kinds are letters, digits or arithmetic
 English. Noise is configurable per instance (`CaptchaNoiseLevel.None|Low|Medium|High`)
 or globally through `TechCaptchaOptions.Noise` (default `Medium`). Glyphs are
 drawn individually with random vertical offsets, rotation and size, and higher
-noise levels add more lines, curves and dots. The refresh
-button pulls a new challenge from `MapTechUICaptcha`;
+noise levels add more lines, curves and dots. The refresh button pulls a new
+challenge from `MapTechUICaptcha`;
 validate posts with `await Request.ValidateTechCaptchaAsync(nameof(model.Captcha))`.
 Set a stable `Secret` or outstanding tokens die on restart. Client API:
 `Tech.Captcha.get('Captcha').refresh()`, `.token()`.
