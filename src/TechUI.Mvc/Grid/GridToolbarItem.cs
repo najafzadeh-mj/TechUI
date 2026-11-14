@@ -15,5 +15,7 @@ namespace TechUI.Mvc.Grid
         public string? Handler { get; set; }
 
         public string? Icon { get; set; }
+
+        public string? FileName { get; set; }
     }
 }

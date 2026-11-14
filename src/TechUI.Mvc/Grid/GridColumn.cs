@@ -26,6 +26,12 @@ namespace TechUI.Mvc.Grid
 
         public bool Filterable { get; set; } = true;
 
+        /// <summary>
+        /// Keeps the column fixed at the start edge while the grid scrolls
+        /// horizontally. Pin only the leading columns of the grid.
+        /// </summary>
+        public bool Pinned { get; set; }
+
         public bool IsTemplate { get; set; }
 
         public string? Template { get; set; }

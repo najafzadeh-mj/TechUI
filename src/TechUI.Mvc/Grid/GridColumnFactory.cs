@@ -14,11 +14,7 @@ namespace TechUI.Mvc.Grid
 
         public GridColumnBuilder Bound<TValue>(Expression<Func<TModel, TValue>> expression)
         {
-            var body = expression.Body is UnaryExpression unary
-                ? unary.Operand
-                : expression.Body;
-
-            var field = BuildFieldPath(body);
+            var field = GridExpressionHelper.GetFieldPath(expression.Body);
 
             var column = new GridColumn
             {
@@ -47,25 +43,6 @@ namespace TechUI.Mvc.Grid
             _columns.Add(column);
 
             return new GridColumnBuilder(column);
-        }
-
-        private static string BuildFieldPath(Expression expression)
-        {
-            var parts = new List<string>();
-            var current = expression;
-
-            while (current is MemberExpression member)
-            {
-                parts.Insert(0, member.Member.Name);
-                current = member.Expression;
-            }
-
-            if (parts.Count == 0 || current is not ParameterExpression)
-            {
-                throw new InvalidOperationException("Invalid column expression.");
-            }
-
-            return string.Join(".", parts);
         }
 
         private static string? GetDataType(Type type)

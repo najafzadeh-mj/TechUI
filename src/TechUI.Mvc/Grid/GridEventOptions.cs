@@ -14,6 +14,12 @@ namespace TechUI.Mvc.Grid
 
         public string? Change { get; set; }
 
+        public string? RowClick { get; set; }
+
+        public string? RowDoubleClick { get; set; }
+
+        public string? GroupToggle { get; set; }
+
         public string? Error { get; set; }
     }
 }

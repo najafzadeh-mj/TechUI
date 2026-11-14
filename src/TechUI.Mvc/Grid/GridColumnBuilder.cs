@@ -38,5 +38,29 @@ namespace TechUI.Mvc.Grid
             _column.Filterable = enabled;
             return this;
         }
+
+        /// <summary>
+        /// Freezes the column at the start edge during horizontal scrolling.
+        /// Use it for leading columns only (e.g. id, code, name).
+        /// </summary>
+        public GridColumnBuilder Pinned(bool enabled = true)
+        {
+            _column.Pinned = enabled;
+            return this;
+        }
+
+        /// <summary>
+        /// Associates a data field with the column. Useful for template
+        /// columns that still need sorting/filtering or a summary aggregate.
+        /// </summary>
+        public GridColumnBuilder Field(string field)
+        {
+            if (!string.IsNullOrWhiteSpace(field))
+            {
+                _column.Field = field.Trim();
+            }
+
+            return this;
+        }
     }
 }

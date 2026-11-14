@@ -27,6 +27,11 @@ namespace TechUI.Mvc.Grid
         ColumnChooser,
 
         /// <summary>
+        /// Download the current page as a CSV file.
+        /// </summary>
+        Export,
+
+        /// <summary>
         /// Custom user-defined toolbar button.
         /// </summary>
         Custom

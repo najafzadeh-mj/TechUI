@@ -51,9 +51,15 @@
     .Sortable()
     .Filterable()
     .Resizable()
+    .Reorderable()
     .PageSize(defaultPageSize)
     .PageSizes(pageSizes)
     .Height(620)
+    .Summary(s => s
+        .Count()
+        .Sum(x => x.Total))
+    .Group(g => g.By(x => x.Customer!.FullName, "مشتری"))
+    .GroupPanel()
     .Toolbar(t =>
     {
         t.Create("سفارش جدید", "onOrderCreate");
@@ -64,11 +70,13 @@
     {
         c.Bound(x => x.Id)
             .Title("شناسه")
-            .Width(80);
+            .Width(80)
+            .Pinned();
 
         c.Bound(x => x.Number)
             .Title("شماره سفارش")
-            .Width(130);
+            .Width(130)
+            .Pinned();
 
         c.Bound(x => x.Customer!.FullName)
             .Title("مشتری")
@@ -86,7 +94,8 @@
 
         c.Template("{{= currency(Total) }}")
             .Title("مبلغ کل")
-            .Width(160);
+            .Width(160)
+            .Field("Total");
 
         c.Template(
             "<a class='btn btn-sm btn-outline-secondary me-1' " +

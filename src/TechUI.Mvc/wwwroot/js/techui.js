@@ -694,9 +694,14 @@ Tech.register('grid', function (el) {
             filterable: column.filterable !== false,
             isTemplate: !!column.isTemplate,
             template: column.template || '',
+            pinned: !!column.pinned,
             hidden: false
         };
     });
+
+    const summaryItems = Array.isArray(options.summary) ? options.summary : [];
+
+    let groupItems = normalizeGroups(options.groups);
 
     const toolbarItems = options.toolbar || [];
 
@@ -707,7 +712,9 @@ Tech.register('grid', function (el) {
         pageSize: parseInt(el.dataset.pageSize || '10', 10) || 10,
         sorts: [],
         filters: [],
-        selectedIndex: -1
+        selectedIndex: -1,
+        selectedIndices: new Set(),
+        collapsedGroups: new Set()
     };
 
     const url = el.dataset.url;
@@ -718,7 +725,14 @@ Tech.register('grid', function (el) {
     const filterableEnabled = (el.dataset.filterable || 'true') === 'true';
     const pageableEnabled = (el.dataset.pageable || 'true') === 'true';
     const selectableEnabled = (el.dataset.selectable || 'false') === 'true';
+    const multiSelectEnabled = (el.dataset.multiSelect || 'false') === 'true';
     const resizableEnabled = (el.dataset.resizable || 'false') === 'true';
+    const reorderableEnabled = (el.dataset.reorderable || 'false') === 'true';
+    const infiniteEnabled = (el.dataset.infiniteScroll || 'false') === 'true';
+
+    const infiniteThreshold = 160;
+
+    const gridLabel = el.dataset.label || 'جدول داده‌ها';
 
     const pageSizeSelectorEnabled =
         (el.dataset.pageSizeSelector || 'false') === 'true';
@@ -732,15 +746,32 @@ Tech.register('grid', function (el) {
 
     const height = parseInt(el.dataset.height || '0', 10) || 0;
 
+    const groupPanelEnabled =
+        (el.dataset.groupPanel || 'false') === 'true';
+
     const storageKey = `tech-grid-columns-${el.id}`;
     const widthStorageKey = `tech-grid-widths-${el.id}`;
     const pageSizeStorageKey = `tech-grid-pagesize-${el.id}`;
+    const orderStorageKey = `tech-grid-order-${el.id}`;
+    const groupStorageKey = `tech-grid-groups-${el.id}`;
 
     let currentRows = [];
-    let lastResult = { data: [], total: 0, page: 1, pageSize: state.pageSize };
+    let lastResult = {
+        data: [],
+        total: 0,
+        rowTotal: 0,
+        grouped: false,
+        page: 1,
+        pageSize: state.pageSize,
+        summary: []
+    };
     let loading = false;
     let loadingStartedAt = 0;
+    let loadingMore = false;
+    let infiniteDone = false;
+    let loadToken = 0;
     let pendingFocusField = null;
+    let pendingGroupFocusKey = null;
 
     const chatState = {
         open: false,
@@ -853,9 +884,116 @@ Tech.register('grid', function (el) {
         }
     }
 
+    function loadColumnOrder() {
+
+        if (!reorderableEnabled) return;
+
+        try {
+
+            const raw = localStorage.getItem(orderStorageKey);
+
+            if (!raw) return;
+
+            const keys = JSON.parse(raw);
+
+            if (!Array.isArray(keys) || keys.length === 0) return;
+
+            const ordered = [];
+
+            keys.forEach(function (key) {
+                const column = columns.find(function (item) {
+                    return item.key === key;
+                });
+
+                if (column && ordered.indexOf(column) < 0) ordered.push(column);
+            });
+
+            columns.forEach(function (column) {
+                if (ordered.indexOf(column) < 0) ordered.push(column);
+            });
+
+            columns.length = 0;
+
+            columns.push.apply(columns, ordered);
+        }
+        catch {
+            // ignore corrupt storage
+        }
+    }
+
+    function saveColumnOrder() {
+
+        try {
+            localStorage.setItem(
+                orderStorageKey,
+                JSON.stringify(columns.map(function (column) {
+                    return column.key;
+                })));
+        }
+        catch {
+            // ignore
+        }
+    }
+
+    function loadGroupState() {
+
+        if (!groupPanelEnabled) return;
+
+        try {
+
+            const raw = localStorage.getItem(groupStorageKey);
+
+            if (raw === null) return;
+
+            const saved = JSON.parse(raw);
+
+            if (!Array.isArray(saved)) return;
+
+            groupItems = normalizeGroups(saved);
+        }
+        catch {
+            // ignore corrupt storage
+        }
+    }
+
+    function saveGroupState() {
+
+        if (!groupPanelEnabled) return;
+
+        try {
+
+            localStorage.setItem(
+                groupStorageKey,
+                JSON.stringify(groupItems.map(function (group) {
+                    return { field: group.field, title: group.title };
+                })));
+        }
+        catch {
+            // ignore
+        }
+    }
+
     loadColumnState();
+    loadColumnOrder();
     loadColumnWidths();
     loadPageSize();
+    loadGroupState();
+
+    (Array.isArray(options.sorts) ? options.sorts : []).forEach(function (sort) {
+
+        if (!sort || !sort.field) return;
+
+        const column = columns.find(function (item) {
+            return item.field === sort.field;
+        });
+
+        if (!column || !sortableEnabled || !column.sortable) return;
+
+        state.sorts.push({
+            field: column.field,
+            dir: sort.dir === 'desc' ? 'desc' : 'asc'
+        });
+    });
 
     function triggerGridEvent(name, payload) {
 
@@ -875,6 +1013,8 @@ Tech.register('grid', function (el) {
 
         loadingStartedAt = Date.now();
 
+        el.setAttribute('aria-busy', 'true');
+
         const overlay = el.querySelector('.tech-grid-loading');
 
         if (overlay) overlay.classList.add('show');
@@ -893,23 +1033,34 @@ Tech.register('grid', function (el) {
         }
 
         if (overlay) overlay.classList.remove('show');
+
+        el.setAttribute('aria-busy', 'false');
     }
 
     // --------------------------------------------------------
     // Request
     // --------------------------------------------------------
 
-    function buildParams() {
+    function buildParams(page) {
 
         const params = new URLSearchParams();
 
-        params.append('Page', state.page);
+        params.append('Page', page || state.page);
         params.append('PageSize', state.pageSize);
 
         state.sorts.forEach(function (sort, index) {
 
             params.append(`Sorts[${index}].Field`, sort.field);
             params.append(`Sorts[${index}].Dir`, sort.dir);
+        });
+
+        groupItems.forEach(function (group, index) {
+
+            params.append(`Groups[${index}].Field`, group.field);
+
+            if (group.title) {
+                params.append(`Groups[${index}].Title`, group.title);
+            }
         });
 
         params.append('Filter.Logic', 'and');
@@ -922,6 +1073,17 @@ Tech.register('grid', function (el) {
             if (filter.value !== null && filter.value !== undefined) {
                 params.append(`Filter.Filters[${index}].Value`, filter.value);
             }
+        });
+
+        summaryItems.forEach(function (item, index) {
+
+            if (!item) return;
+
+            if (item.field) {
+                params.append(`Summary[${index}].Field`, item.field);
+            }
+
+            params.append(`Summary[${index}].Type`, item.type || 'sum');
         });
 
         if (dataFunctionName) {
@@ -953,16 +1115,21 @@ Tech.register('grid', function (el) {
         return {
             data: result.data || result.Data || [],
             total: Number(result.total ?? result.Total ?? 0) || 0,
+            rowTotal: Number(
+                result.rowTotal ?? result.RowTotal ??
+                result.total ?? result.Total ?? 0) || 0,
+            grouped: !!(result.grouped ?? result.Grouped),
             page: Number(result.page ?? result.Page ?? state.page) || 1,
-            pageSize: Number(result.pageSize ?? result.PageSize ?? state.pageSize) || state.pageSize
+            pageSize: Number(result.pageSize ?? result.PageSize ?? state.pageSize) || state.pageSize,
+            summary: result.summary || result.Summary || []
         };
     }
 
-    async function fetchResult() {
+    async function fetchResult(page) {
 
         return normalizeResult(await Tech.requestJson(url, {
             method: httpMethod,
-            params: buildParams(),
+            params: buildParams(page),
             antiforgeryElement: el
         }));
     }
@@ -976,7 +1143,10 @@ Tech.register('grid', function (el) {
             return;
         }
 
+        loadToken++;
         loading = true;
+        loadingMore = false;
+        infiniteDone = false;
         showLoading();
 
         triggerGridEvent('Binding', { sender: api });
@@ -1002,6 +1172,13 @@ Tech.register('grid', function (el) {
             currentRows = result.data;
 
             state.selectedIndex = -1;
+            state.selectedIndices.clear();
+
+            if (infiniteEnabled) {
+
+                infiniteDone = state.page >= Math.max(
+                    Math.ceil(lastResult.total / state.pageSize), 1);
+            }
 
             render();
 
@@ -1020,7 +1197,120 @@ Tech.register('grid', function (el) {
             loading = false;
 
             await hideLoading();
+
+            if (infiniteEnabled) scheduleInfiniteCheck();
         }
+    }
+
+    async function loadMore() {
+
+        if (!infiniteEnabled || loading || loadingMore ||
+            infiniteDone || !url) {
+            return;
+        }
+
+        const totalPages = Math.max(
+            Math.ceil(lastResult.total / state.pageSize), 1);
+
+        if (state.page >= totalPages) {
+
+            infiniteDone = true;
+            updateInfiniteFooter();
+            return;
+        }
+
+        loadingMore = true;
+
+        const token = loadToken;
+
+        updateInfiniteFooter();
+
+        try {
+
+            const result = await fetchResult(state.page + 1);
+
+            if (token !== loadToken) return;
+
+            const rows = result.data || [];
+
+            if (rows.length === 0) {
+
+                infiniteDone = true;
+            }
+            else {
+
+                const baseIndex = currentRows.length;
+
+                currentRows = currentRows.concat(rows);
+
+                state.page = result.page > 0 ? result.page : state.page + 1;
+
+                lastResult = result;
+
+                appendRows(rows, baseIndex);
+
+                if (state.page >= Math.max(
+                    Math.ceil(lastResult.total / state.pageSize), 1)) {
+                    infiniteDone = true;
+                }
+
+                triggerGridEvent('Bound', {
+                    sender: api,
+                    data: result,
+                    appended: true,
+                    loaded: currentRows.length
+                });
+            }
+        }
+        catch (err) {
+
+            console.error('TechUI Grid load more error:', err);
+
+            triggerGridEvent('Error', { sender: api, error: err });
+        }
+        finally {
+
+            loadingMore = false;
+
+            if (token === loadToken) {
+
+                updateInfiniteFooter();
+                scheduleInfiniteCheck();
+            }
+        }
+    }
+
+    function infiniteNearBottom() {
+
+        if (!infiniteEnabled || infiniteDone || loadingMore) return false;
+
+        const body = el.querySelector('.tech-grid-body');
+
+        if (!body) return false;
+
+        if (height > 0) {
+
+            return body.scrollHeight - body.scrollTop - body.clientHeight <=
+                infiniteThreshold;
+        }
+
+        const sentinel = body.querySelector('.tech-grid-infinite-sentinel');
+
+        if (!sentinel) return false;
+
+        return sentinel.getBoundingClientRect().top <=
+            window.innerHeight + infiniteThreshold;
+    }
+
+    function scheduleInfiniteCheck() {
+
+        if (!infiniteEnabled) return;
+
+        setTimeout(function () {
+
+            if (infiniteNearBottom()) loadMore();
+
+        }, 0);
     }
 
     // --------------------------------------------------------
@@ -1032,6 +1322,18 @@ Tech.register('grid', function (el) {
         return columns.filter(function (column) {
             return !column.hidden;
         });
+    }
+
+    function pinnedColumns() {
+
+        return visibleColumns().filter(function (column) {
+            return column.pinned;
+        });
+    }
+
+    function pinSelectColumn() {
+
+        return multiSelectEnabled && pinnedColumns().length > 0;
     }
 
     function getValue(row, field) {
@@ -1078,7 +1380,12 @@ Tech.register('grid', function (el) {
 
     function buildToolbarHtml() {
 
-        if (toolbarItems.length === 0 && !chatOptions) return '';
+        const groupPanelVisible = groupPanelEnabled &&
+            groupableColumns().length > 0;
+
+        if (toolbarItems.length === 0 && !chatOptions && !groupPanelVisible) {
+            return '';
+        }
 
         let html =
             '<div class="tech-grid-toolbar d-flex align-items-center gap-2 p-2 border-bottom flex-wrap">';
@@ -1093,10 +1400,22 @@ Tech.register('grid', function (el) {
                 '<button type="button" ' +
                 'class="btn btn-sm btn-outline-primary tech-toolbar-btn" ' +
                 `data-action="${Tech.escapeHtml(item.type || 'custom')}" ` +
-                `data-handler="${Tech.escapeHtml(item.handler || '')}">` +
+                `data-handler="${Tech.escapeHtml(item.handler || '')}" ` +
+                `data-file-name="${Tech.escapeHtml(item.fileName || '')}">` +
                 icon + Tech.escapeHtml(item.text || '') +
                 '</button>';
         });
+
+        if (groupPanelVisible) {
+
+            html +=
+                '<button type="button" ' +
+                'class="btn btn-sm btn-outline-primary tech-toolbar-btn tech-grid-group-btn" ' +
+                'data-action="groups" aria-haspopup="dialog" ' +
+                `aria-expanded="${groupPanel.open ? 'true' : 'false'}">` +
+                '<i class="bi bi-collection me-1"></i>گروه‌بندی' +
+                '</button>';
+        }
 
         if (chatOptions) {
 
@@ -1113,9 +1432,99 @@ Tech.register('grid', function (el) {
         return html + '</div>';
     }
 
+    const filterShortLabels = {
+        contains: 'شامل',
+        notcontains: 'شامل نیست',
+        eq: '=',
+        neq: '≠',
+        startswith: 'شروع با',
+        endswith: 'پایان با',
+        gt: '>',
+        gte: '≥',
+        lt: '<',
+        lte: '≤',
+        isnull: 'خالی است',
+        isnotnull: 'خالی نیست',
+        in: 'یکی از',
+        notin: 'هیچ‌کدام'
+    };
+
+    function filterColumnTitle(field) {
+
+        const column = columns.find(function (item) {
+            return item.field === field;
+        });
+
+        return column ? column.title : field;
+    }
+
+    function filterValueText(filter) {
+
+        if (isNullaryOperator(filter.operator)) return '';
+
+        const column = columns.find(function (item) {
+            return item.field === filter.field;
+        });
+
+        const value = String(filter.value ?? '');
+
+        if (column && column.dataType === 'boolean') {
+            return value === 'true' ? 'بله' : value === 'false' ? 'خیر' : value;
+        }
+
+        return value;
+    }
+
+    function buildFilterBarHtml() {
+
+        if (state.filters.length === 0) return '';
+
+        let html =
+            '<div class="tech-grid-filterbar" role="region" ' +
+            'aria-label="فیلترهای فعال" aria-live="polite">' +
+            '<span class="tech-grid-filterbar-label">فیلترها:</span>';
+
+        state.filters.forEach(function (filter) {
+
+            const title = filterColumnTitle(filter.field);
+
+            const operatorText = filterShortLabels[filter.operator] || filter.operator;
+
+            const valueText = filterValueText(filter);
+
+            html +=
+                '<span class="tech-filter-chip">' +
+                `<span class="tech-filter-chip-title">${Tech.escapeHtml(title)}</span>` +
+                `<span class="tech-filter-chip-body">${Tech.escapeHtml(operatorText)}` +
+                (valueText ? ' ' + Tech.escapeHtml(valueText) : '') +
+                '</span>' +
+                '<button type="button" class="tech-filter-chip-remove" ' +
+                `data-field="${Tech.escapeHtml(filter.field)}" ` +
+                `aria-label="حذف فیلتر ${Tech.escapeHtml(title)}" title="حذف فیلتر">` +
+                '<i class="bi bi-x"></i></button>' +
+                '</span>';
+        });
+
+        html +=
+            '<button type="button" class="tech-filter-clear-all">' +
+            'پاک کردن همه</button></div>';
+
+        return html;
+    }
+
     function buildHeaderHtml() {
 
         let html = '<thead><tr>';
+
+        if (multiSelectEnabled) {
+
+            const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
+
+            html +=
+                `<th class="tech-grid-select-col${pinnedClass}" scope="col">` +
+                '<input type="checkbox" class="tech-grid-select-all" ' +
+                'aria-label="انتخاب همه‌ی سطرها"></th>';
+        }
 
         columns.forEach(function (column) {
 
@@ -1163,17 +1572,33 @@ Tech.register('grid', function (el) {
                 ? `<span class="tech-resize-handle" data-key="${Tech.escapeHtml(column.key)}"></span>`
                 : '';
 
+            const reorderHandle = reorderableEnabled
+                ? '<span class="tech-reorder-handle" draggable="true" ' +
+                  `data-key="${Tech.escapeHtml(column.key)}" ` +
+                  'title="جابه‌جایی ستون" aria-hidden="true">' +
+                  '<i class="bi bi-grip-vertical"></i></span>'
+                : '';
+
             const sortClass = canSort ? 'tech-sortable' : '';
             const sortCursor = canSort ? 'cursor:pointer;' : '';
             const sortAttrs = canSort ? 'role="button" tabindex="0"' : '';
-            const ariaSort = canSort && sort
-                ? `aria-sort="${sort.dir === 'asc' ? 'ascending' : 'descending'}"`
+            const sortTitle = canSort
+                ? 'title="مرتب‌سازی — برای چندستونه Shift+کلیک"'
+                : '';
+            const ariaSort = canSort
+                ? `aria-sort="${!sort
+                    ? 'none'
+                    : sort.dir === 'asc' ? 'ascending' : 'descending'}"`
                 : '';
 
+            const pinnedClass = column.pinned ? ' tech-col-pinned' : '';
+
             html +=
-                `<th data-key="${Tech.escapeHtml(column.key)}" scope="col" ${ariaSort} style="${widthStyle}">` +
+                `<th data-key="${Tech.escapeHtml(column.key)}" ` +
+                `class="tech-col${pinnedClass}" scope="col" ${ariaSort} style="${widthStyle}">` +
+                reorderHandle +
                 '<div class="d-flex align-items-center justify-content-between gap-1">' +
-                `<span class="${sortClass} flex-grow-1" ${sortAttrs} ` +
+                `<span class="${sortClass} flex-grow-1" ${sortAttrs} ${sortTitle} ` +
                 `data-field="${Tech.escapeHtml(column.field)}" ` +
                 `style="${sortCursor}">` +
                 Tech.escapeHtml(column.title) + icon +
@@ -1187,10 +1612,305 @@ Tech.register('grid', function (el) {
         return html + '</tr></thead>';
     }
 
+    function buildDataRowHtml(row, rowIndex, visible, highlight, highlightFields) {
+
+        const multiSelected = multiSelectEnabled &&
+            state.selectedIndices.has(rowIndex);
+
+        const selectedClass = (rowIndex === state.selectedIndex || multiSelected)
+            ? ' tech-row-selected'
+            : '';
+
+        const selectableClass = selectableEnabled
+            ? ' tech-grid-row-selectable'
+            : '';
+
+        const highlightClass = highlight && highlight.value !== '' &&
+            highlightFields.some(function (field) {
+                return sameCellValue(getValue(row, field), highlight.value);
+            })
+            ? ' tech-grid-row-highlight'
+            : '';
+
+        const isSelected = rowIndex === state.selectedIndex || multiSelected;
+
+        const selectableAttrs = selectableEnabled
+            ? ` aria-selected="${isSelected}"`
+            : '';
+
+        let html = `<tr class="tech-grid-row${selectableClass}${selectedClass}${highlightClass}" ` +
+            `data-row-index="${rowIndex}"${selectableAttrs}>`;
+
+        if (multiSelectEnabled) {
+
+            const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
+
+            html +=
+                `<td class="tech-grid-select-col${pinnedClass}">` +
+                `<input type="checkbox" class="tech-grid-row-check" data-index="${rowIndex}" ` +
+                `aria-label="انتخاب سطر ${rowIndex + 1}" ${multiSelected ? 'checked' : ''}>` +
+                '</td>';
+        }
+
+        visible.forEach(function (column, columnIndex) {
+
+            const cellTabIndex = rowIndex === 0 && columnIndex === 0
+                ? '0'
+                : '-1';
+
+            const pinnedClass = column.pinned ? ' class="tech-col-pinned"' : '';
+
+            const cellAttrs =
+                ` data-key="${Tech.escapeHtml(column.key)}"` +
+                pinnedClass +
+                ` tabindex="${cellTabIndex}"`;
+
+            if (column.isTemplate) {
+
+                html += '<td' + cellAttrs + '>' +
+                    applyTemplate(column.template, row) + '</td>';
+            }
+            else {
+
+                html += '<td' + cellAttrs + '>' +
+                    Tech.escapeHtml(getValue(row, column.field)) + '</td>';
+            }
+        });
+
+        return html + '</tr>';
+    }
+
+    function groupColumn(field) {
+
+        const normalized = String(field).toLowerCase();
+
+        return columns.find(function (column) {
+            return column.field &&
+                column.field.toLowerCase() === normalized;
+        }) || null;
+    }
+
+    function normalizeGroups(input) {
+
+        const groups = [];
+
+        (Array.isArray(input) ? input : []).forEach(function (group) {
+
+            const field = typeof group === 'string'
+                ? group
+                : (group && group.field);
+
+            if (!field) return;
+
+            const value = String(field).trim();
+
+            if (!value) return;
+
+            const duplicate = groups.some(function (item) {
+                return item.field.toLowerCase() === value.toLowerCase();
+            });
+
+            if (duplicate) return;
+
+            const column = groupColumn(value);
+
+            groups.push({
+                field: column ? column.field : value,
+                title: (group && group.title) || ''
+            });
+        });
+
+        return groups;
+    }
+
+    function applyGroups(groups) {
+
+        groupItems = normalizeGroups(groups);
+
+        state.collapsedGroups.clear();
+        state.page = 1;
+
+        saveGroupState();
+
+        render();
+
+        if (url) {
+            load();
+        }
+
+        if (groupPanel.open) {
+
+            const button = el.querySelector('.tech-grid-group-btn');
+
+            if (button) button.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    function groupTitle(group) {
+
+        if (group.title) return group.title;
+
+        const column = groupColumn(group.field);
+
+        return column ? column.title : group.field;
+    }
+
+    function formatGroupValue(value, column) {
+
+        if (value === null || value === undefined || value === '') {
+            return '<span class="tech-group-empty">(خالی)</span>';
+        }
+
+        if (typeof value === 'boolean' ||
+            (column && column.dataType === 'boolean')) {
+
+            const truthy = value === true ||
+                String(value).toLowerCase() === 'true';
+
+            return truthy ? 'بله' : 'خیر';
+        }
+
+        return Tech.escapeHtml(String(value));
+    }
+
+    function groupFullKey(parentKey, field, rawKey) {
+
+        return (parentKey ? parentKey + '\u0001' : '') +
+            field + '=' + rawKey;
+    }
+
+    function buildGroupRowHtml(group, level, key, value, count, collapsed, colspan) {
+
+        const escapedKey = Tech.escapeHtml(key);
+
+        const indent = 0.75 + level * 1.25;
+
+        return '<tr class="tech-grid-group-row' +
+            (collapsed ? ' tech-grid-group-collapsed' : '') + '" ' +
+            `data-group-key="${escapedKey}" data-group-level="${level}">` +
+            `<td colspan="${colspan}" class="tech-grid-group-cell" ` +
+            `style="padding-inline-start:${indent}rem">` +
+            '<button type="button" class="tech-grid-group-toggle" ' +
+            `data-group-key="${escapedKey}" ` +
+            `aria-expanded="${collapsed ? 'false' : 'true'}">` +
+            '<i class="bi bi-chevron-down" aria-hidden="true"></i>' +
+            `<span class="visually-hidden">${collapsed ? 'باز کردن گروه' : 'بستن گروه'}</span>` +
+            '</button>' +
+            `<span class="tech-group-title">${Tech.escapeHtml(groupTitle(group))}:</span>` +
+            `<span class="tech-group-value">${formatGroupValue(value, groupColumn(group.field))}</span>` +
+            `<span class="tech-group-count">(${count.toLocaleString()} ردیف)</span>` +
+            '</td></tr>';
+    }
+
+    function buildGroupedRows(
+        visible, highlight, highlightFields, colspan, sourceRows,
+        indexOffset) {
+
+        const rowsToRender = sourceRows || currentRows;
+        const offset = indexOffset || 0;
+
+        const rowIndexMap = new Map();
+
+        rowsToRender.forEach(function (row, index) {
+            if (!rowIndexMap.has(row)) rowIndexMap.set(row, offset + index);
+        });
+
+        function renderLevel(rows, level, parentKey) {
+
+            const group = groupItems[level];
+
+            const buckets = new Map();
+
+            rows.forEach(function (row) {
+
+                const value = getValue(row, group.field);
+
+                const rawKey = value === '' ? '' : String(value);
+
+                if (!buckets.has(rawKey)) {
+                    buckets.set(rawKey, { value: value, rows: [] });
+                }
+
+                buckets.get(rawKey).rows.push(row);
+            });
+
+            let html = '';
+
+            buckets.forEach(function (bucket, rawKey) {
+
+                const key = groupFullKey(parentKey, group.field, rawKey);
+
+                const collapsed = state.collapsedGroups.has(key);
+
+                html += buildGroupRowHtml(
+                    group, level, key, bucket.value, bucket.rows.length,
+                    collapsed, colspan);
+
+                if (collapsed) return;
+
+                if (level + 1 < groupItems.length) {
+
+                    html += renderLevel(bucket.rows, level + 1, key);
+
+                    return;
+                }
+
+                bucket.rows.forEach(function (row) {
+
+                    html += buildDataRowHtml(
+                        row, rowIndexMap.get(row), visible,
+                        highlight, highlightFields);
+                });
+            });
+
+            return html;
+        }
+
+        return renderLevel(rowsToRender, 0, '');
+    }
+
+    function allGroupKeys() {
+
+        function collect(rows, level, parentKey) {
+
+            if (level >= groupItems.length) return [];
+
+            const group = groupItems[level];
+
+            const buckets = new Map();
+
+            rows.forEach(function (row) {
+
+                const value = getValue(row, group.field);
+
+                const rawKey = value === '' ? '' : String(value);
+
+                if (!buckets.has(rawKey)) buckets.set(rawKey, []);
+
+                buckets.get(rawKey).push(row);
+            });
+
+            const keys = [];
+
+            buckets.forEach(function (bucketRows, rawKey) {
+
+                const key = groupFullKey(parentKey, group.field, rawKey);
+
+                keys.push(key);
+                keys.push.apply(keys, collect(bucketRows, level + 1, key));
+            });
+
+            return keys;
+        }
+
+        return collect(currentRows, 0, '');
+    }
+
     function buildBodyHtml() {
 
         const visible = visibleColumns();
-        const colspan = Math.max(visible.length, 1);
+        const colspan = Math.max(visible.length, 1) +
+            (multiSelectEnabled ? 1 : 0);
 
         if (currentRows.length === 0) {
 
@@ -1202,8 +1922,6 @@ Tech.register('grid', function (el) {
                 '</div></td></tr></tbody>';
         }
 
-        let html = '<tbody>';
-
         const highlight = chatState.highlight;
 
         const highlightFields = highlight
@@ -1212,53 +1930,798 @@ Tech.register('grid', function (el) {
                 : visible.map(function (column) { return column.field; }))
             : [];
 
-        currentRows.forEach(function (row, rowIndex) {
+        let html = '<tbody>';
 
-            const selectedClass = rowIndex === state.selectedIndex
-                ? ' tech-row-selected'
-                : '';
+        if (groupItems.length === 0) {
 
-            const selectableClass = selectableEnabled
-                ? ' tech-grid-row-selectable'
-                : '';
+            currentRows.forEach(function (row, rowIndex) {
 
-            const highlightClass = highlight && highlight.value !== '' &&
-                highlightFields.some(function (field) {
-                    return sameCellValue(getValue(row, field), highlight.value);
-                })
-                ? ' tech-grid-row-highlight'
-                : '';
-
-            const selectableAttrs = selectableEnabled
-                ? ` tabindex="0" aria-selected="${rowIndex === state.selectedIndex}"`
-                : '';
-
-            html += `<tr class="tech-grid-row${selectableClass}${selectedClass}${highlightClass}" ` +
-                `data-row-index="${rowIndex}"${selectableAttrs}>`;
-
-            visible.forEach(function (column) {
-
-                if (column.isTemplate) {
-
-                    html += '<td>' + applyTemplate(column.template, row) + '</td>';
-                }
-                else {
-
-                    html += '<td>' + Tech.escapeHtml(getValue(row, column.field)) + '</td>';
-                }
+                html += buildDataRowHtml(
+                    row, rowIndex, visible, highlight, highlightFields);
             });
+        }
+        else {
 
-            html += '</tr>';
-        });
+            html += buildGroupedRows(
+                visible, highlight, highlightFields, colspan);
+        }
 
         return html + '</tbody>';
     }
 
+    // --------------------------------------------------------
+    // Grouping panel
+    // --------------------------------------------------------
+
+    const groupPanel = {
+        open: false,
+        element: null
+    };
+
+    function groupableColumns() {
+
+        return columns.filter(function (column) {
+            return !!column.field;
+        });
+    }
+
+    function buildGroupLevelsHtml() {
+
+        if (groupItems.length === 0) {
+
+            return '<div class="tech-group-panel-empty">' +
+                'گروه‌بندی فعال نیست.</div>';
+        }
+
+        let html = '';
+
+        groupItems.forEach(function (group, index) {
+
+            html +=
+                `<div class="tech-group-level" data-field="${Tech.escapeHtml(group.field)}">` +
+                `<span class="tech-group-level-index">${index + 1}</span>` +
+                `<span class="tech-group-level-title">${Tech.escapeHtml(groupTitle(group))}</span>` +
+                '<div class="tech-group-level-actions">' +
+                '<button type="button" class="tech-group-up" ' +
+                `aria-label="بالا بردن سطح ${Tech.escapeHtml(groupTitle(group))}" ` +
+                `title="بالا"${index === 0 ? ' disabled' : ''}>` +
+                '<i class="bi bi-arrow-up" aria-hidden="true"></i></button>' +
+                '<button type="button" class="tech-group-down" ' +
+                `aria-label="پایین آوردن سطح ${Tech.escapeHtml(groupTitle(group))}" ` +
+                `title="پایین"${index === groupItems.length - 1 ? ' disabled' : ''}>` +
+                '<i class="bi bi-arrow-down" aria-hidden="true"></i></button>' +
+                '<button type="button" class="tech-group-remove" ' +
+                `aria-label="حذف سطح ${Tech.escapeHtml(groupTitle(group))}" title="حذف">` +
+                '<i class="bi bi-x" aria-hidden="true"></i></button>' +
+                '</div></div>';
+        });
+
+        return html;
+    }
+
+    function buildGroupAddHtml() {
+
+        const all = groupableColumns();
+
+        const available = all.filter(function (column) {
+
+            return !groupItems.some(function (group) {
+                return group.field.toLowerCase() ===
+                    column.field.toLowerCase();
+            });
+        });
+
+        let html =
+            '<select class="form-select form-select-sm tech-group-field" ' +
+            'aria-label="فیلد گروه‌بندی"' +
+            (available.length === 0 ? ' disabled' : '') + '>';
+
+        if (available.length === 0) {
+
+            html += '<option>' + (all.length === 0
+                ? 'ستون قابل گروه‌بندی وجود ندارد'
+                : 'همه‌ی ستون‌ها انتخاب شده‌اند') + '</option>';
+        }
+        else {
+
+            available.forEach(function (column) {
+
+                html +=
+                    `<option value="${Tech.escapeHtml(column.field)}">` +
+                    Tech.escapeHtml(column.title) + '</option>';
+            });
+        }
+
+        return html + '</select>' +
+            '<button type="button" class="btn btn-sm btn-primary tech-group-add"' +
+            (available.length === 0 ? ' disabled' : '') + '>افزودن</button>';
+    }
+
+    function buildGroupPanelHtml() {
+
+        return '<div class="tech-group-panel" role="dialog" ' +
+            'aria-label="گروه‌بندی ردیف‌ها">' +
+            '<div class="tech-group-panel-head">' +
+            '<span class="tech-group-panel-title">گروه‌بندی ردیف‌ها</span>' +
+            '<button type="button" class="tech-group-panel-close" ' +
+            'aria-label="بستن پنل گروه‌بندی" title="بستن">' +
+            '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+            '</div>' +
+            '<div class="tech-group-panel-list">' + buildGroupLevelsHtml() + '</div>' +
+            '<div class="tech-group-panel-add">' + buildGroupAddHtml() + '</div>' +
+            '<div class="tech-group-panel-foot">' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary tech-group-clear"' +
+            (groupItems.length === 0 ? ' disabled' : '') + '>حذف گروه‌بندی</button>' +
+            '</div></div>';
+    }
+
+    function groupPanelButton() {
+
+        return el.querySelector('.tech-grid-group-btn');
+    }
+
+    function positionGroupPanel() {
+
+        const button = groupPanelButton();
+
+        if (!button || !groupPanel.element) return;
+
+        const rect = button.getBoundingClientRect();
+        const rtl = getComputedStyle(el).direction === 'rtl';
+        const margin = 8;
+        const gap = 6;
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = document.documentElement.clientHeight;
+        const panelWidth = groupPanel.element.offsetWidth;
+
+        if (rtl) {
+
+            const preferred = viewportWidth - rect.right;
+            const maxRight = viewportWidth - panelWidth - margin;
+
+            groupPanel.element.style.right =
+                Math.round(Math.max(margin, Math.min(preferred, Math.max(margin, maxRight)))) + 'px';
+            groupPanel.element.style.left = 'auto';
+        }
+        else {
+
+            const maxLeft = viewportWidth - panelWidth - margin;
+
+            groupPanel.element.style.left =
+                Math.round(Math.max(margin, Math.min(rect.left, Math.max(margin, maxLeft)))) + 'px';
+            groupPanel.element.style.right = 'auto';
+        }
+
+        const spaceBelow = viewportHeight - rect.bottom - gap - margin;
+        const spaceAbove = rect.top - gap - margin;
+
+        if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+
+            groupPanel.element.style.top = 'auto';
+            groupPanel.element.style.bottom =
+                Math.round(viewportHeight - rect.top + gap) + 'px';
+            groupPanel.element.style.maxHeight =
+                Math.max(120, Math.round(spaceAbove)) + 'px';
+        }
+        else {
+
+            groupPanel.element.style.bottom = 'auto';
+            groupPanel.element.style.top =
+                Math.round(rect.bottom + gap) + 'px';
+            groupPanel.element.style.maxHeight =
+                Math.max(120, Math.round(spaceBelow)) + 'px';
+        }
+    }
+
+    function focusGroupControl(selector) {
+
+        if (!groupPanel.open) return;
+
+        const target = groupPanel.element.querySelector(selector);
+
+        if (target) target.focus();
+    }
+
+    function refreshGroupPanel() {
+
+        if (!groupPanel.open || !groupPanel.element) return;
+
+        groupPanel.element.querySelector('.tech-group-panel-list').innerHTML =
+            buildGroupLevelsHtml();
+        groupPanel.element.querySelector('.tech-group-panel-add').innerHTML =
+            buildGroupAddHtml();
+
+        const clear = groupPanel.element.querySelector('.tech-group-clear');
+
+        if (clear) clear.disabled = groupItems.length === 0;
+
+        positionGroupPanel();
+    }
+
+    function addGroupField(field) {
+
+        if (!field) return;
+
+        if (groupItems.some(function (group) {
+            return group.field.toLowerCase() === String(field).toLowerCase();
+        })) {
+            return;
+        }
+
+        applyGroups(groupItems.concat([{ field: field, title: '' }]));
+
+        refreshGroupPanel();
+
+        focusGroupControl('.tech-group-field');
+    }
+
+    function removeGroupAt(index) {
+
+        if (index < 0 || index >= groupItems.length) return;
+
+        applyGroups(groupItems.filter(function (_, itemIndex) {
+            return itemIndex !== index;
+        }));
+
+        refreshGroupPanel();
+
+        const rows = groupPanel.element
+            ? groupPanel.element.querySelectorAll('.tech-group-level')
+            : [];
+
+        if (rows.length > 0) {
+
+            const target = rows[Math.min(index, rows.length - 1)]
+                .querySelector('.tech-group-remove');
+
+            if (target) target.focus();
+        }
+        else {
+
+            focusGroupControl('.tech-group-field');
+        }
+    }
+
+    function moveGroup(index, delta) {
+
+        const target = index + delta;
+
+        if (target < 0 || target >= groupItems.length) return;
+
+        const next = groupItems.slice();
+        const moved = next.splice(index, 1)[0];
+
+        next.splice(target, 0, moved);
+
+        applyGroups(next);
+
+        refreshGroupPanel();
+
+        const rows = groupPanel.element
+            ? groupPanel.element.querySelectorAll('.tech-group-level')
+            : [];
+
+        const control = rows[target] &&
+            rows[target].querySelector('.tech-group-remove');
+
+        if (control) control.focus();
+    }
+
+    function clearGroups() {
+
+        applyGroups([]);
+
+        refreshGroupPanel();
+
+        focusGroupControl('.tech-group-field');
+    }
+
+    function onGroupPanelDocClick(ev) {
+
+        if (!groupPanel.open) return;
+
+        if (groupPanel.element && groupPanel.element.contains(ev.target)) return;
+
+        const button = groupPanelButton();
+
+        if (button && button.contains(ev.target)) return;
+
+        closeGroupPanel();
+    }
+
+    function onGroupPanelKeydown(ev) {
+
+        if (ev.key === 'Escape' && groupPanel.open) {
+
+            ev.stopPropagation();
+            ev.preventDefault();
+
+            closeGroupPanel(true);
+        }
+    }
+
+    function onGroupPanelViewportChange(ev) {
+
+        if (!groupPanel.open) return;
+
+        if (ev && ev.type === 'scroll' &&
+            groupPanel.element &&
+            ev.target instanceof Node &&
+            groupPanel.element.contains(ev.target)) {
+            return;
+        }
+
+        closeGroupPanel();
+    }
+
+    function openGroupPanel() {
+
+        closeGroupPanel();
+
+        const panel = document.createElement('div');
+
+        panel.innerHTML = buildGroupPanelHtml();
+
+        const element = panel.firstElementChild;
+
+        const themeHost = el.closest('.tech-dark, [data-tech-theme="dark"]');
+
+        if (themeHost) {
+
+            if (themeHost.classList.contains('tech-dark')) {
+                element.classList.add('tech-dark');
+            }
+            else {
+                element.setAttribute('data-tech-theme', 'dark');
+            }
+        }
+
+        if (getComputedStyle(el).direction === 'rtl') {
+            element.classList.add('tech-rtl');
+        }
+
+        document.body.appendChild(element);
+
+        groupPanel.element = element;
+        groupPanel.open = true;
+
+        const button = groupPanelButton();
+
+        if (button) button.setAttribute('aria-expanded', 'true');
+
+        positionGroupPanel();
+
+        const initialFocus = element.querySelector('.tech-group-panel-close');
+
+        if (initialFocus) initialFocus.focus({ preventScroll: true });
+
+        element.addEventListener('click', function (ev) {
+
+            const control = ev.target.closest('button');
+
+            if (!control) return;
+
+            if (control.classList.contains('tech-group-panel-close')) {
+                closeGroupPanel(true);
+                return;
+            }
+
+            const row = control.closest('.tech-group-level');
+
+            const rows = Array.prototype.slice.call(
+                element.querySelectorAll('.tech-group-level'));
+
+            const index = row ? rows.indexOf(row) : -1;
+
+            if (control.classList.contains('tech-group-add')) {
+
+                const select = element.querySelector('.tech-group-field');
+
+                if (select) addGroupField(select.value);
+
+                return;
+            }
+
+            if (control.classList.contains('tech-group-clear')) {
+                clearGroups();
+                return;
+            }
+
+            if (index < 0) return;
+
+            if (control.classList.contains('tech-group-up')) {
+                moveGroup(index, -1);
+            }
+            else if (control.classList.contains('tech-group-down')) {
+                moveGroup(index, 1);
+            }
+            else if (control.classList.contains('tech-group-remove')) {
+                removeGroupAt(index);
+            }
+        });
+
+        document.addEventListener('click', onGroupPanelDocClick, true);
+        document.addEventListener('keydown', onGroupPanelKeydown, true);
+        window.addEventListener('resize', onGroupPanelViewportChange);
+        window.addEventListener('scroll', onGroupPanelViewportChange, true);
+    }
+
+    function closeGroupPanel(focusButton) {
+
+        if (!groupPanel.open) return;
+
+        if (groupPanel.element) groupPanel.element.remove();
+
+        groupPanel.element = null;
+        groupPanel.open = false;
+
+        const button = groupPanelButton();
+
+        if (button) {
+
+            button.setAttribute('aria-expanded', 'false');
+
+            if (focusButton) button.focus();
+        }
+
+        document.removeEventListener('click', onGroupPanelDocClick, true);
+        document.removeEventListener('keydown', onGroupPanelKeydown, true);
+        window.removeEventListener('resize', onGroupPanelViewportChange);
+        window.removeEventListener('scroll', onGroupPanelViewportChange, true);
+    }
+
+    const summaryTypeLabels = {
+        count: 'تعداد',
+        sum: 'جمع',
+        average: 'میانگین',
+        min: 'کمینه',
+        max: 'بیشینه'
+    };
+
+    function summaryColumn(item) {
+
+        const field = String(item && item.field || '');
+
+        if (!field) {
+            return visibleColumns().find(function (column) {
+                return !!column.field;
+            }) || visibleColumns()[0] || null;
+        }
+
+        return columns.find(function (column) {
+            return column.field &&
+                column.field.toLowerCase() === field.toLowerCase();
+        }) || null;
+    }
+
+    function summaryServerValue(item) {
+
+        const field = String(item.field || '');
+        const type = String(item.type || 'sum').toLowerCase();
+
+        const list = Array.isArray(lastResult.summary) ? lastResult.summary : [];
+
+        const match = list.find(function (entry) {
+
+            if (!entry) return false;
+
+            const entryField = String(entry.field ?? entry.Field ?? '');
+            const entryType = String(entry.type ?? entry.Type ?? 'sum').toLowerCase();
+
+            return entryType === type &&
+                entryField.toLowerCase() === field.toLowerCase();
+        });
+
+        if (!match) return undefined;
+
+        return Object.prototype.hasOwnProperty.call(match, 'value')
+            ? match.value
+            : match.Value;
+    }
+
+    function summaryNumber(value) {
+
+        if (value === null || value === undefined || value === '') return null;
+
+        if (typeof value === 'number') return isFinite(value) ? value : null;
+
+        const cleaned = String(value)
+            .replace(/[\s,٬]/g, '')
+            .replace(/[^\d.+-]/g, '');
+
+        const parsed = Number(cleaned);
+
+        return isFinite(parsed) ? parsed : null;
+    }
+
+    function summaryFallback(item, column) {
+
+        const type = String(item.type || 'sum').toLowerCase();
+        const field = item.field || (column && column.field) || '';
+
+        if (type === 'count') {
+
+            if (!field) return currentRows.length;
+
+            return currentRows.filter(function (row) {
+                const value = getValue(row, field);
+                return value !== null && value !== undefined && value !== '';
+            }).length;
+        }
+
+        if (!field) return null;
+
+        const numbers = currentRows
+            .map(function (row) { return summaryNumber(getValue(row, field)); })
+            .filter(function (value) { return value !== null; });
+
+        if (numbers.length === 0) return null;
+
+        if (type === 'sum') {
+            return numbers.reduce(function (sum, value) { return sum + value; }, 0);
+        }
+
+        if (type === 'average') {
+            return numbers.reduce(function (sum, value) { return sum + value; }, 0) /
+                numbers.length;
+        }
+
+        if (type === 'min') return Math.min.apply(null, numbers);
+        if (type === 'max') return Math.max.apply(null, numbers);
+
+        return null;
+    }
+
+    function formatSummaryValue(value) {
+
+        if (value === null || value === undefined || value === '') return '';
+
+        const number = Number(value);
+
+        if (!isFinite(number)) return Tech.escapeHtml(String(value));
+
+        const fractionDigits = Math.abs(number - Math.round(number)) > 1e-9 ? 2 : 0;
+
+        try {
+            return number.toLocaleString('fa-IR', {
+                maximumFractionDigits: fractionDigits
+            });
+        }
+        catch {
+            return number.toLocaleString();
+        }
+    }
+
+    function buildFooterHtml() {
+
+        if (summaryItems.length === 0) return '';
+
+        const visible = visibleColumns();
+
+        const entriesByKey = {};
+
+        summaryItems.forEach(function (item) {
+
+            if (!item) return;
+
+            const column = summaryColumn(item);
+
+            if (!column) return;
+
+            if (!entriesByKey[column.key]) entriesByKey[column.key] = [];
+
+            entriesByKey[column.key].push({ item: item, column: column });
+        });
+
+        if (Object.keys(entriesByKey).length === 0) return '';
+
+        let html = '<tfoot class="tech-grid-footer"><tr>';
+
+        if (multiSelectEnabled) {
+
+            const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
+
+            html += `<td class="tech-grid-select-col${pinnedClass}"></td>`;
+        }
+
+        visible.forEach(function (column) {
+
+            const pinnedClass = column.pinned ? ' tech-col-pinned' : '';
+
+            const keyAttr = ` data-key="${Tech.escapeHtml(column.key)}"`;
+
+            const entries = entriesByKey[column.key];
+
+            if (!entries) {
+
+                html += `<td class="tech-summary-empty${pinnedClass}"${keyAttr}></td>`;
+
+                return;
+            }
+
+            let inner = '';
+
+            entries.forEach(function (entry, index) {
+
+                const type = String(entry.item.type || 'sum').toLowerCase();
+
+                let value = summaryServerValue(entry.item);
+
+                if (value === undefined) {
+                    value = summaryFallback(entry.item, entry.column);
+                }
+
+                const label = entry.item.label || summaryTypeLabels[type] || '';
+
+                if (index > 0) {
+                    inner += '<span class="tech-summary-sep" aria-hidden="true">·</span>';
+                }
+
+                inner +=
+                    (label
+                        ? `<span class="tech-summary-label">${Tech.escapeHtml(label)}</span>`
+                        : '') +
+                    `<span class="tech-summary-value">${formatSummaryValue(value)}</span>`;
+            });
+
+            html +=
+                `<td class="tech-summary-cell${pinnedClass}"${keyAttr} ` +
+                `data-summary-field="${Tech.escapeHtml(column.field || '')}">` +
+                inner + '</td>';
+        });
+
+        return html + '</tr></tfoot>';
+    }
+
+    function applyPinnedOffsets() {
+
+        const body = el.querySelector('.tech-grid-body');
+        const table = body ? body.querySelector('table') : null;
+
+        const headers = table
+            ? Array.from(table.querySelectorAll('thead th'))
+            : [];
+
+        if (!table || headers.length === 0) {
+            el.removeAttribute('data-pin-side');
+            return;
+        }
+
+        const rtl = getComputedStyle(el).direction === 'rtl';
+        const side = rtl ? 'right' : 'left';
+        const otherSide = rtl ? 'left' : 'right';
+
+        const offsets = {};
+
+        let offset = 0;
+        let lastKey = null;
+
+        headers.forEach(function (th) {
+
+            if (!th.classList.contains('tech-col-pinned')) return;
+
+            const key = th.dataset.key || '__select__';
+
+            offsets[key] = offset;
+
+            offset += th.getBoundingClientRect().width;
+
+            lastKey = key;
+        });
+
+        if (lastKey === null) {
+            el.removeAttribute('data-pin-side');
+            return;
+        }
+
+        el.setAttribute('data-pin-side', side);
+
+        table.querySelectorAll('.tech-col-pinned').forEach(function (cell) {
+
+            const key = cell.dataset.key || '__select__';
+
+            cell.style[otherSide] = '';
+            cell.style[side] = (offsets[key] || 0) + 'px';
+
+            cell.classList.toggle('tech-col-pinned-edge', key === lastKey);
+        });
+    }
+
+    let pinnedResizeTimer = 0;
+
+    window.addEventListener('resize', function () {
+
+        if (pinnedResizeTimer) clearTimeout(pinnedResizeTimer);
+
+        pinnedResizeTimer = setTimeout(applyPinnedOffsets, 100);
+    });
+
+    function buildInfiniteFooterHtml() {
+
+        const loaded = currentRows.length;
+        const total = Number(
+            lastResult.grouped ? lastResult.rowTotal : lastResult.total) || 0;
+        const totalCount = Math.max(total, loaded);
+
+        let groupedNote = '';
+
+        if (lastResult.grouped) {
+
+            const loadedGroups = Math.min(
+                lastResult.total, state.page * state.pageSize);
+
+            groupedNote =
+                ` · ${loadedGroups.toLocaleString()} گروه`;
+        }
+
+        let statusText =
+            `نمایش ${loaded.toLocaleString()} از ${totalCount.toLocaleString()} رکورد` +
+            groupedNote;
+
+        if (loadingMore) statusText += ' · در حال بارگذاری…';
+
+        if (infiniteDone) {
+
+            statusText +=
+                ' <span class="tech-grid-infinite-end">' +
+                'همه‌ی رکوردها نمایش داده شد.</span>';
+        }
+
+        const button = infiniteDone
+            ? ''
+            : '<button type="button" ' +
+                'class="btn btn-sm btn-outline-primary tech-infinite-more"' +
+                (loadingMore ? ' disabled' : '') + '>' +
+                (loadingMore
+                    ? '<span class="spinner-border spinner-border-sm me-1" ' +
+                        'aria-hidden="true"></span>در حال بارگذاری…'
+                    : 'بارگذاری بیشتر') +
+                '</button>';
+
+        return '<div class="tech-grid-infinite" tabindex="-1">' +
+            '<span class="tech-grid-infinite-count" role="status" ' +
+            'aria-live="polite">' +
+            statusText +
+            '</span>' +
+            button +
+            '</div>';
+    }
+
+    function updateInfiniteFooter() {
+
+        const host = el.querySelector('.tech-grid-infinite');
+
+        if (!host) return;
+
+        const hadFocus = host.contains(document.activeElement);
+
+        const template = document.createElement('template');
+
+        template.innerHTML = buildInfiniteFooterHtml();
+
+        const next = template.content.firstElementChild;
+
+        host.replaceWith(next);
+
+        if (hadFocus) {
+
+            next.setAttribute('tabindex', '-1');
+
+            const button = next.querySelector('.tech-infinite-more');
+
+            if (button && !button.disabled) button.focus({ preventScroll: true });
+            else next.focus({ preventScroll: true });
+        }
+    }
+
     function buildPagerHtml() {
+
+        if (infiniteEnabled) return buildInfiniteFooterHtml();
 
         if (!pageableEnabled) return '';
 
         const total = lastResult.total;
+        const grouped = lastResult.grouped;
         const page = state.page;
         const pageSize = state.pageSize;
 
@@ -1279,7 +2742,7 @@ Tech.register('grid', function (el) {
 
             html +=
                 '<div class="d-flex align-items-center gap-2 tech-page-size">' +
-                '<label class="small mb-0">تعداد سطر:</label>' +
+                `<label class="small mb-0">${grouped ? 'تعداد گروه:' : 'تعداد سطر:'}</label>` +
                 '<select class="form-select form-select-sm tech-page-size-select">' +
                 sizes.map(function (size) {
                     return `<option value="${size}" ${size === pageSize ? 'selected' : ''}>${size}</option>`;
@@ -1289,18 +2752,24 @@ Tech.register('grid', function (el) {
 
         html += '</div>';
 
+        const totalLabel = grouped
+            ? `(${total.toLocaleString()} گروه، ${lastResult.rowTotal.toLocaleString()} رکورد)`
+            : `(${total.toLocaleString()} رکورد)`;
+
         html += '<div class="tech-grid-pager-center">' +
             `صفحه ${page} از ${totalPages}` +
-            `<span class="tech-grid-total">(${total.toLocaleString()} رکورد)</span>` +
+            `<span class="tech-grid-total">${totalLabel}</span>` +
             '</div>';
 
         html += '<div class="tech-grid-pager-right">';
 
         html += '<button type="button" class="tech-page-btn tech-page-first" ' +
+            'aria-label="اولین صفحه" title="اولین صفحه" ' +
             (page === 1 ? 'disabled' : '') + '>' +
             '<i class="bi bi-chevron-double-right"></i></button>';
 
         html += '<button type="button" class="tech-page-btn tech-page-prev" ' +
+            'aria-label="صفحه قبل" title="صفحه قبل" ' +
             (page === 1 ? 'disabled' : '') + '>' +
             '<i class="bi bi-chevron-right"></i></button>';
 
@@ -1329,6 +2798,7 @@ Tech.register('grid', function (el) {
 
             html += '<button type="button" ' +
                 `class="tech-page-btn tech-page-number ${i === page ? 'active' : ''}" ` +
+                `${i === page ? 'aria-current="page"' : ''} ` +
                 `data-page="${i}">${i}</button>`;
         }
 
@@ -1345,10 +2815,12 @@ Tech.register('grid', function (el) {
         html += '</div>';
 
         html += '<button type="button" class="tech-page-btn tech-page-next" ' +
+            'aria-label="صفحه بعد" title="صفحه بعد" ' +
             (page === totalPages ? 'disabled' : '') + '>' +
             '<i class="bi bi-chevron-left"></i></button>';
 
         html += '<button type="button" class="tech-page-btn tech-page-last" ' +
+            'aria-label="آخرین صفحه" title="آخرین صفحه" ' +
             (page === totalPages ? 'disabled' : '') + '>' +
             '<i class="bi bi-chevron-double-left"></i></button>';
 
@@ -1364,17 +2836,65 @@ Tech.register('grid', function (el) {
         const tableClass = 'table table-striped table-hover mb-0' +
             (resizableEnabled ? ' tech-grid-table-fixed' : '');
 
+        const previousBody = el.querySelector('.tech-grid-body');
+
+        const scrollTop = previousBody ? previousBody.scrollTop : 0;
+        const scrollLeft = previousBody ? previousBody.scrollLeft : 0;
+
+        const columnCount = visibleColumns().length +
+            (multiSelectEnabled ? 1 : 0);
+
+        const activeElement = document.activeElement;
+
+        const focusState = activeElement &&
+            activeElement.matches &&
+            activeElement.matches('td[data-key]') &&
+            el.contains(activeElement)
+            ? {
+                rowIndex: parseInt(
+                    activeElement.parentElement.dataset.rowIndex, 10),
+                key: activeElement.dataset.key
+            }
+            : null;
+
+        const infiniteFocusState = infiniteEnabled && activeElement &&
+            activeElement.closest &&
+            activeElement.closest('.tech-grid-infinite') &&
+            el.contains(activeElement);
+
         el.innerHTML =
-            '<div class="tech-grid-loading"><div class="tech-grid-spinner"></div></div>' +
+            '<div class="tech-grid-loading" role="status">' +
+            '<div class="tech-grid-spinner"></div>' +
+            '<span class="visually-hidden">در حال بارگذاری…</span>' +
+            '</div>' +
             buildToolbarHtml() +
+            buildFilterBarHtml() +
             `<div class="tech-grid-body table-responsive" ${bodyStyle}>` +
-            `<table class="${tableClass}">` +
+            `<table class="${tableClass}" aria-label="${Tech.escapeHtml(gridLabel)}" ` +
+            `aria-rowcount="${lastResult.rowTotal}" aria-colcount="${columnCount}">` +
             buildHeaderHtml() +
             buildBodyHtml() +
-            '</table></div>' +
+            buildFooterHtml() +
+            '</table>' +
+            (infiniteEnabled
+                ? '<div class="tech-grid-infinite-sentinel" aria-hidden="true"></div>'
+                : '') +
+            '</div>' +
             buildPagerHtml();
 
         bindGridEvents();
+
+        if (multiSelectEnabled) syncSelectionUi();
+
+        applyPinnedOffsets();
+
+        const body = el.querySelector('.tech-grid-body');
+
+        if (body) {
+
+            body.scrollTop = scrollTop;
+            body.scrollLeft = scrollLeft;
+        }
 
         if (chatPanel) {
 
@@ -1396,15 +2916,130 @@ Tech.register('grid', function (el) {
 
             if (header) header.focus();
         }
+        else if (focusState) {
+
+            const rows = getNavRows();
+
+            const row = rows.find(function (item) {
+                return parseInt(item.dataset.rowIndex, 10) === focusState.rowIndex;
+            });
+
+            const cells = getNavCells(row);
+
+            const cell = cells.find(function (item) {
+                return item.dataset.key === focusState.key;
+            }) || cells[0];
+
+            if (cell) {
+
+                cells.forEach(function (item) {
+                    item.setAttribute('tabindex', '-1');
+                });
+
+                cell.setAttribute('tabindex', '0');
+                cell.focus();
+            }
+        }
+
+        if (pendingGroupFocusKey !== null) {
+
+            const key = pendingGroupFocusKey;
+
+            pendingGroupFocusKey = null;
+
+            const toggle = Array.from(
+                el.querySelectorAll('.tech-grid-group-toggle'))
+                .find(function (button) {
+                    return button.dataset.groupKey === key;
+                });
+
+            if (toggle) toggle.focus();
+        }
+
+        if (infiniteFocusState) {
+
+            const footer = el.querySelector('.tech-grid-infinite');
+
+            if (footer) {
+
+                const button = footer.querySelector('.tech-infinite-more');
+
+                if (button && !button.disabled) {
+                    button.focus({ preventScroll: true });
+                }
+                else {
+                    footer.focus({ preventScroll: true });
+                }
+            }
+        }
+
+        if (infiniteEnabled) scheduleInfiniteCheck();
     }
 
     // --------------------------------------------------------
     // Grid events
     // --------------------------------------------------------
 
+    function selectionPayload() {
+
+        const payload = {
+            sender: api,
+            data: api.selectedData()
+        };
+
+        if (multiSelectEnabled) payload.selected = api.selectedRows();
+
+        return payload;
+    }
+
+    function syncSelectionUi() {
+
+        const total = currentRows.length;
+        const count = state.selectedIndices.size;
+
+        el.querySelectorAll('.tech-grid-row-check').forEach(function (input) {
+
+            const index = parseInt(input.dataset.index, 10);
+            const checked = state.selectedIndices.has(index);
+
+            input.checked = checked;
+
+            const row = input.closest('.tech-grid-row');
+
+            if (!row) return;
+
+            const isSelected = checked || index === state.selectedIndex;
+
+            row.classList.toggle('tech-row-selected', isSelected);
+            row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        });
+
+        const selectAll = el.querySelector('.tech-grid-select-all');
+
+        if (selectAll) {
+
+            selectAll.checked = total > 0 && count === total;
+            selectAll.indeterminate = count > 0 && count < total;
+        }
+    }
+
+    function toggleRowSelection(index, checked) {
+
+        if (!multiSelectEnabled) return;
+
+        if (checked) state.selectedIndices.add(index);
+        else state.selectedIndices.delete(index);
+
+        syncSelectionUi();
+
+        triggerGridEvent('Change', selectionPayload());
+    }
+
     function selectRow(row) {
 
         state.selectedIndex = parseInt(row.dataset.rowIndex, 10);
+
+        if (multiSelectEnabled) state.selectedIndices.clear();
 
         el.querySelectorAll('.tech-grid-row').forEach(function (item) {
 
@@ -1415,13 +3050,364 @@ Tech.register('grid', function (el) {
         row.classList.add('tech-row-selected');
         row.setAttribute('aria-selected', 'true');
 
-        triggerGridEvent('Change', {
-            sender: api,
-            data: api.selectedData()
+        if (multiSelectEnabled) syncSelectionUi();
+        else triggerGridEvent('Change', selectionPayload());
+    }
+
+    // --------------------------------------------------------
+    // Cell keyboard navigation
+    // --------------------------------------------------------
+
+    function getNavRows() {
+
+        return Array.from(
+            el.querySelectorAll('.tech-grid-body tbody tr[data-row-index]'));
+    }
+
+    function getNavCells(row) {
+
+        return row
+            ? Array.from(row.querySelectorAll('td[data-key]'))
+            : [];
+    }
+
+    function clamp(value, min, max) {
+
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function focusCell(rowIndex, columnIndex) {
+
+        const rows = getNavRows();
+
+        if (rows.length === 0) return null;
+
+        const row = rows[clamp(rowIndex, 0, rows.length - 1)];
+
+        const cells = getNavCells(row);
+
+        if (cells.length === 0) return null;
+
+        const cell = cells[clamp(columnIndex, 0, cells.length - 1)];
+
+        el.querySelectorAll('td[data-key][tabindex="0"]').forEach(function (item) {
+            item.setAttribute('tabindex', '-1');
+        });
+
+        cell.setAttribute('tabindex', '0');
+        cell.focus();
+
+        return cell;
+    }
+
+    function onGridKeydown(ev) {
+
+        if (ev.altKey || ev.metaKey) return;
+
+        const target = ev.target;
+
+        if (!target.closest) return;
+
+        if (target.closest('a, button, input, select, textarea')) return;
+
+        const cell = target.closest('td[data-key]');
+
+        if (!cell) return;
+
+        const row = cell.closest('tr');
+        const rows = getNavRows();
+        const rowIndex = rows.indexOf(row);
+        const cells = getNavCells(row);
+        const columnIndex = cells.indexOf(cell);
+
+        if (rowIndex < 0 || columnIndex < 0) return;
+
+        const rtl = getComputedStyle(el).direction === 'rtl';
+
+        let targetRow = rowIndex;
+        let targetColumn = columnIndex;
+
+        switch (ev.key) {
+
+            case 'ArrowDown':
+                targetRow = rowIndex + 1;
+                break;
+
+            case 'ArrowUp':
+                targetRow = rowIndex - 1;
+                break;
+
+            case 'ArrowRight':
+                targetColumn = rtl ? columnIndex - 1 : columnIndex + 1;
+                break;
+
+            case 'ArrowLeft':
+                targetColumn = rtl ? columnIndex + 1 : columnIndex - 1;
+                break;
+
+            case 'Home':
+                targetColumn = 0;
+                if (ev.ctrlKey) targetRow = 0;
+                break;
+
+            case 'End':
+                targetColumn = cells.length - 1;
+                if (ev.ctrlKey) targetRow = rows.length - 1;
+                break;
+
+            case 'PageDown':
+                targetRow = rowIndex + 10;
+                break;
+
+            case 'PageUp':
+                targetRow = rowIndex - 10;
+                break;
+
+            case 'Enter':
+                triggerGridEvent('RowClick', {
+                    sender: api,
+                    index: rowIndex,
+                    row: currentRows[rowIndex] || null,
+                    data: currentRows[rowIndex] || null
+                });
+                ev.preventDefault();
+                return;
+
+            case ' ':
+            case 'Spacebar':
+
+                if (!selectableEnabled && !multiSelectEnabled) return;
+
+                if (multiSelectEnabled) {
+                    toggleRowSelection(
+                        rowIndex, !state.selectedIndices.has(rowIndex));
+                }
+                else {
+                    selectRow(row);
+                }
+
+                ev.preventDefault();
+                return;
+
+            default:
+                return;
+        }
+
+        if (ev.ctrlKey && ev.key !== 'Home' && ev.key !== 'End') return;
+
+        targetRow = clamp(targetRow, 0, rows.length - 1);
+        targetColumn = clamp(targetColumn, 0, cells.length - 1);
+
+        if (targetRow === rowIndex && targetColumn === columnIndex) return;
+
+        ev.preventDefault();
+
+        focusCell(targetRow, targetColumn);
+    }
+
+    function bindGroupToggleButton(button) {
+
+        button.addEventListener('click', function (ev) {
+
+            ev.stopPropagation();
+
+            const key = button.dataset.groupKey;
+
+            const collapsed = !state.collapsedGroups.has(key);
+
+            if (collapsed) state.collapsedGroups.add(key);
+            else state.collapsedGroups.delete(key);
+
+            pendingGroupFocusKey = key;
+
+            render();
+
+            triggerGridEvent('GroupToggle', {
+                sender: api,
+                key: key,
+                collapsed: collapsed
+            });
         });
     }
 
+    function bindRowElement(row) {
+
+        function rowPayload() {
+
+            const index = parseInt(row.dataset.rowIndex, 10);
+
+            const data = currentRows[index] || null;
+
+            return { sender: api, index: index, row: data, data: data };
+        }
+
+        row.addEventListener('click', function (ev) {
+
+            if (ev.target.closest('a, button, input, select, textarea, label')) {
+                return;
+            }
+
+            if (multiSelectEnabled) {
+
+                const index = parseInt(row.dataset.rowIndex, 10);
+
+                toggleRowSelection(
+                    index, !state.selectedIndices.has(index));
+            }
+            else if (selectableEnabled) selectRow(row);
+
+            triggerGridEvent('RowClick', rowPayload());
+        });
+
+        row.addEventListener('dblclick', function (ev) {
+
+            if (ev.target.closest('a, button, input, select, textarea, label')) {
+                return;
+            }
+
+            triggerGridEvent('RowDoubleClick', rowPayload());
+        });
+    }
+
+    function bindRowCheckbox(input) {
+
+        input.addEventListener('change', function () {
+
+            toggleRowSelection(
+                parseInt(input.dataset.index, 10),
+                input.checked);
+        });
+    }
+
+    function appendRows(rows, baseIndex) {
+
+        const tbody = el.querySelector('.tech-grid-body tbody');
+
+        if (!tbody) {
+
+            render();
+            return;
+        }
+
+        // Client side grouping needs to re-group every loaded row so a
+        // group is not emitted twice across chunk boundaries.
+        if (groupItems.length > 0 && !lastResult.grouped) {
+
+            render();
+            return;
+        }
+
+        const visible = visibleColumns();
+        const colspan = Math.max(visible.length, 1) +
+            (multiSelectEnabled ? 1 : 0);
+
+        const highlight = chatState.highlight;
+
+        const highlightFields = highlight
+            ? (highlight.field
+                ? [highlight.field]
+                : visible.map(function (column) { return column.field; }))
+            : [];
+
+        let html = '';
+
+        if (groupItems.length > 0) {
+
+            html = buildGroupedRows(
+                visible, highlight, highlightFields, colspan,
+                rows, baseIndex);
+        }
+        else {
+
+            rows.forEach(function (row, index) {
+
+                html += buildDataRowHtml(
+                    row, baseIndex + index, visible,
+                    highlight, highlightFields);
+            });
+        }
+
+        const emptyRow = tbody.querySelector('.tech-grid-empty');
+
+        if (emptyRow && emptyRow.closest('tr')) {
+            emptyRow.closest('tr').remove();
+        }
+
+        const template = document.createElement('template');
+
+        template.innerHTML = html;
+
+        template.content.querySelectorAll('.tech-grid-group-toggle')
+            .forEach(bindGroupToggleButton);
+
+        template.content.querySelectorAll('.tech-grid-row')
+            .forEach(bindRowElement);
+
+        if (multiSelectEnabled) {
+
+            template.content.querySelectorAll('.tech-grid-row-check')
+                .forEach(bindRowCheckbox);
+        }
+
+        tbody.appendChild(template.content);
+
+        if (multiSelectEnabled) syncSelectionUi();
+
+        applyPinnedOffsets();
+    }
+
     function bindGridEvents() {
+
+        // Active filter chips
+        el.querySelectorAll('.tech-filter-chip-remove').forEach(function (button) {
+
+            button.addEventListener('click', function () {
+
+                const field = button.dataset.field;
+
+                state.filters = state.filters.filter(function (filter) {
+                    return filter.field !== field;
+                });
+
+                state.page = 1;
+
+                load();
+            });
+        });
+
+        const clearAllFilters = el.querySelector('.tech-filter-clear-all');
+
+        if (clearAllFilters) {
+
+            clearAllFilters.addEventListener('click', function () {
+
+                if (state.filters.length === 0) return;
+
+                state.filters = [];
+                state.page = 1;
+
+                load();
+            });
+        }
+
+        // Cell keyboard navigation
+        const tbody = el.querySelector('.tech-grid-body tbody');
+
+        if (tbody) tbody.addEventListener('keydown', onGridKeydown);
+
+        if (infiniteEnabled) {
+
+            const body = el.querySelector('.tech-grid-body');
+
+            if (body) {
+
+                body.addEventListener('scroll', function () {
+
+                    if (infiniteNearBottom()) loadMore();
+
+                }, { passive: true });
+            }
+        }
 
         // Sorting
         el.querySelectorAll('.tech-sortable').forEach(function (header) {
@@ -1494,25 +3480,41 @@ Tech.register('grid', function (el) {
             });
         });
 
-        // Row selection
-        if (selectableEnabled) {
+        // Group headers
+        el.querySelectorAll('.tech-grid-group-toggle')
+            .forEach(bindGroupToggleButton);
 
-            el.querySelectorAll('.tech-grid-row').forEach(function (row) {
+        // Rows: selection + row events
+        el.querySelectorAll('.tech-grid-row').forEach(bindRowElement);
 
-                row.addEventListener('click', function () {
-                    selectRow(row);
-                });
+        // Multi-select checkboxes
+        if (multiSelectEnabled) {
 
-                row.addEventListener('keydown', function (ev) {
+            const selectAll = el.querySelector('.tech-grid-select-all');
 
-                    if (ev.key === 'Enter' || ev.key === ' ') {
+            if (selectAll) {
 
-                        ev.preventDefault();
+                selectAll.addEventListener('change', function () {
 
-                        selectRow(row);
+                    state.selectedIndices.clear();
+
+                    if (selectAll.checked) {
+
+                        currentRows.forEach(function (_, index) {
+                            state.selectedIndices.add(index);
+                        });
                     }
+
+                    state.selectedIndex = -1;
+
+                    syncSelectionUi();
+
+                    triggerGridEvent('Change', selectionPayload());
                 });
-            });
+            }
+
+            el.querySelectorAll('.tech-grid-row-check')
+                .forEach(bindRowCheckbox);
         }
 
         // Toolbar
@@ -1525,6 +3527,16 @@ Tech.register('grid', function (el) {
                 if (action === 'refresh') {
 
                     api.refresh();
+                    return;
+                }
+
+                if (action === 'groups') {
+
+                    ev.stopPropagation();
+
+                    if (groupPanel.open) closeGroupPanel();
+                    else openGroupPanel();
+
                     return;
                 }
 
@@ -1546,6 +3558,14 @@ Tech.register('grid', function (el) {
                     return;
                 }
 
+                if (action === 'export') {
+
+                    ev.stopPropagation();
+
+                    exportCsv(button.dataset.fileName || null);
+                    return;
+                }
+
                 const handlerName = button.dataset.handler;
 
                 if (!handlerName) return;
@@ -1556,7 +3576,8 @@ Tech.register('grid', function (el) {
 
                     fn({
                         sender: api,
-                        selected: api.selectedData()
+                        selected: api.selectedData(),
+                        selectedRows: api.selectedRows()
                     });
                 }
             });
@@ -1636,6 +3657,108 @@ Tech.register('grid', function (el) {
             });
         });
 
+        // Column reorder
+        if (reorderableEnabled) {
+
+            let draggedKey = null;
+
+            function clearDropState() {
+
+                el.querySelectorAll('.tech-col-drop-target')
+                    .forEach(function (th) {
+                        th.classList.remove('tech-col-drop-target');
+                    });
+            }
+
+            function clearDragState() {
+
+                el.querySelectorAll('.tech-col-dragging')
+                    .forEach(function (th) {
+                        th.classList.remove('tech-col-dragging');
+                    });
+
+                clearDropState();
+            }
+
+            el.querySelectorAll('.tech-reorder-handle').forEach(function (handle) {
+
+                handle.addEventListener('dragstart', function (ev) {
+
+                    draggedKey = handle.dataset.key;
+
+                    const th = handle.closest('th');
+
+                    if (th) th.classList.add('tech-col-dragging');
+
+                    if (ev.dataTransfer) {
+
+                        ev.dataTransfer.effectAllowed = 'move';
+                        ev.dataTransfer.setData('text/plain', draggedKey);
+                    }
+                });
+
+                handle.addEventListener('dragend', function () {
+
+                    draggedKey = null;
+
+                    clearDragState();
+                });
+            });
+
+            el.querySelectorAll('th[data-key]').forEach(function (th) {
+
+                th.addEventListener('dragover', function (ev) {
+
+                    if (!draggedKey || th.dataset.key === draggedKey) return;
+
+                    ev.preventDefault();
+
+                    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+
+                    clearDropState();
+
+                    th.classList.add('tech-col-drop-target');
+                });
+
+                th.addEventListener('dragleave', function () {
+
+                    th.classList.remove('tech-col-drop-target');
+                });
+
+                th.addEventListener('drop', function (ev) {
+
+                    ev.preventDefault();
+
+                    const targetKey = th.dataset.key;
+                    const sourceKey = draggedKey;
+
+                    draggedKey = null;
+
+                    clearDragState();
+
+                    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+
+                    const sourceIndex = columns.findIndex(function (column) {
+                        return column.key === sourceKey;
+                    });
+
+                    const targetIndex = columns.findIndex(function (column) {
+                        return column.key === targetKey;
+                    });
+
+                    if (sourceIndex < 0 || targetIndex < 0) return;
+
+                    const moved = columns.splice(sourceIndex, 1)[0];
+
+                    columns.splice(targetIndex, 0, moved);
+
+                    saveColumnOrder();
+
+                    render();
+                });
+            });
+        }
+
         // Column resize
         if (resizableEnabled) {
 
@@ -1684,7 +3807,7 @@ Tech.register('grid', function (el) {
 
                         saveColumnWidths();
 
-                        render();
+                        applyPinnedOffsets();
                     }
 
                     document.addEventListener('mousemove', onMove);
@@ -1700,6 +3823,7 @@ Tech.register('grid', function (el) {
 
     const filterOperators = [
         { value: 'contains', text: 'شامل' },
+        { value: 'notcontains', text: 'شامل نیست' },
         { value: 'eq', text: 'مساوی' },
         { value: 'neq', text: 'نامساوی' },
         { value: 'startswith', text: 'شروع با' },
@@ -1737,6 +3861,13 @@ Tech.register('grid', function (el) {
         }
 
         const allowed = ['eq', 'neq', 'isnull', 'isnotnull', 'in', 'notin'];
+
+        if (type === 'boolean') {
+            return filterOperators.filter(function (item) {
+                return ['eq', 'neq', 'isnull', 'isnotnull']
+                    .indexOf(item.value) >= 0;
+            });
+        }
 
         if (type === 'number' || type === 'date' || type === 'time') {
             allowed.push('gt', 'gte', 'lt', 'lte');
@@ -1776,6 +3907,17 @@ Tech.register('grid', function (el) {
 
         const value = current ? (current.value ?? '') : '';
 
+        const isBooleanColumn = column && column.dataType === 'boolean';
+
+        const inputHtml = isBooleanColumn
+            ? '<select class="form-select form-select-sm tech-filter-input">' +
+              '<option value="">—</option>' +
+              `<option value="true" ${String(value) === 'true' ? 'selected' : ''}>بله</option>` +
+              `<option value="false" ${String(value) === 'false' ? 'selected' : ''}>خیر</option>` +
+              '</select>'
+            : '<input type="text" class="form-control form-control-sm tech-filter-input" ' +
+              `value="${Tech.escapeHtml(value)}" placeholder="مقدار...">`;
+
         const popup = document.createElement('div');
 
         popup.className = 'tech-filter-popup card shadow-sm';
@@ -1792,8 +3934,7 @@ Tech.register('grid', function (el) {
                 return `<option value="${item.value}" ${item.value === operator ? 'selected' : ''}>${item.text}</option>`;
             }).join('') +
             '</select>' +
-            '<input type="text" class="form-control form-control-sm tech-filter-input" ' +
-            `value="${Tech.escapeHtml(value)}" placeholder="مقدار...">` +
+            inputHtml +
             '<div class="d-flex justify-content-end gap-2 mt-3">' +
             '<button type="button" class="btn btn-sm btn-outline-secondary tech-filter-clear">پاک کردن</button>' +
             '<button type="button" class="btn btn-sm btn-primary tech-filter-apply">اعمال</button>' +
@@ -1883,7 +4024,8 @@ Tech.register('grid', function (el) {
 
         if (!input.disabled) {
             input.focus();
-            input.select();
+
+            if (typeof input.select === 'function') input.select();
         }
     }
 
@@ -2139,7 +4281,7 @@ Tech.register('grid', function (el) {
 
         return {
             id: el.id,
-            total: lastResult.total,
+            total: lastResult.rowTotal,
             columns: columns.map(function (column) {
 
                 return {
@@ -2517,14 +4659,85 @@ Tech.register('grid', function (el) {
 
         if (selection && state.selectedIndex >= 0) {
 
-            triggerGridEvent('Change', {
-                sender: api,
-                data: api.selectedData()
-            });
+            triggerGridEvent('Change', selectionPayload());
         }
     }
 
     renderChatMessages();
+
+    // --------------------------------------------------------
+    // CSV export
+    // --------------------------------------------------------
+
+    function csvEscape(value) {
+
+        const text = String(value ?? '')
+            .replace(/\r?\n/g, ' ')
+            .trim();
+
+        return /[",]/.test(text)
+            ? '"' + text.replace(/"/g, '""') + '"'
+            : text;
+    }
+
+    function exportCsv(fileName) {
+
+        if (currentRows.length === 0) {
+
+            Tech.notify('داده‌ای برای خروجی وجود ندارد.', {
+                type: 'warning',
+                title: 'خروجی CSV'
+            });
+
+            return;
+        }
+
+        const visible = visibleColumns();
+
+        const lines = [
+            visible.map(function (column) {
+                return csvEscape(column.title);
+            }).join(',')
+        ];
+
+        el.querySelectorAll('.tech-grid-body tbody tr[data-row-index]')
+            .forEach(function (row) {
+
+                const cells = row.querySelectorAll('td[data-key]');
+
+                lines.push(Array.from(cells).map(function (cell) {
+                    return csvEscape(cell.textContent);
+                }).join(','));
+            });
+
+        let name = fileName ||
+            (el.id + '-' + new Date().toISOString().slice(0, 10));
+
+        if (!/\.csv$/i.test(name)) name += '.csv';
+
+        name = name.replace(/[\\/:*?"<>|]+/g, '-');
+
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
+            type: 'text/csv;charset=utf-8;'
+        });
+
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+
+        link.href = url;
+        link.download = name;
+
+        document.body.appendChild(link);
+
+        link.click();
+
+        document.body.removeChild(link);
+
+        setTimeout(function () {
+            URL.revokeObjectURL(url);
+        }, 0);
+    }
 
     // --------------------------------------------------------
     // Public API
@@ -2534,21 +4747,67 @@ Tech.register('grid', function (el) {
 
         refresh: async function () {
 
+            if (infiniteEnabled) {
+
+                state.page = 1;
+                currentRows = [];
+            }
+
             await load();
 
             return api;
         },
 
+        loadMore: async function () {
+
+            await loadMore();
+
+            return api;
+        },
+
+        hasMore: function () {
+
+            return infiniteEnabled && !infiniteDone && !loadingMore;
+        },
+
         selectedData: function () {
+
+            if (multiSelectEnabled && state.selectedIndices.size > 0) {
+
+                const index = Array.from(state.selectedIndices)[0];
+
+                return currentRows[index] || null;
+            }
 
             return state.selectedIndex >= 0
                 ? (currentRows[state.selectedIndex] || null)
                 : null;
         },
 
+        selectedRows: function () {
+
+            return Array.from(state.selectedIndices)
+                .sort(function (a, b) { return a - b; })
+                .map(function (index) { return currentRows[index]; })
+                .filter(Boolean);
+        },
+
+        getData: function () {
+
+            return currentRows.slice();
+        },
+
+        exportCsv: function (fileName) {
+
+            exportCsv(fileName);
+
+            return api;
+        },
+
         clearSelection: function () {
 
             state.selectedIndex = -1;
+            state.selectedIndices.clear();
 
             el.querySelectorAll('.tech-grid-row').forEach(function (row) {
 
@@ -2558,6 +4817,8 @@ Tech.register('grid', function (el) {
                     row.setAttribute('aria-selected', 'false');
                 }
             });
+
+            if (multiSelectEnabled) syncSelectionUi();
 
             return api;
         },
@@ -2651,6 +4912,94 @@ Tech.register('grid', function (el) {
             state.page = 1;
 
             return api;
+        },
+
+        setGroups: function (groups) {
+
+            applyGroups(groups);
+
+            refreshGroupPanel();
+
+            return api;
+        },
+
+        addGroup: function (field, title) {
+
+            if (!field) return api;
+
+            const exists = groupItems.some(function (group) {
+                return group.field.toLowerCase() ===
+                    String(field).toLowerCase();
+            });
+
+            if (exists) return api;
+
+            applyGroups(groupItems.concat([{
+                field: field,
+                title: title || ''
+            }]));
+
+            refreshGroupPanel();
+
+            return api;
+        },
+
+        removeGroup: function (field) {
+
+            const normalized = String(field).toLowerCase();
+
+            applyGroups(groupItems.filter(function (group) {
+                return group.field.toLowerCase() !== normalized;
+            }));
+
+            refreshGroupPanel();
+
+            return api;
+        },
+
+        clearGroups: function () {
+
+            applyGroups([]);
+
+            refreshGroupPanel();
+
+            return api;
+        },
+
+        getGroups: function () {
+
+            return groupItems.map(function (group) {
+                return { field: group.field, title: group.title };
+            });
+        },
+
+        expandAllGroups: function () {
+
+            if (state.collapsedGroups.size === 0) return api;
+
+            state.collapsedGroups.clear();
+
+            render();
+
+            return api;
+        },
+
+        collapseAllGroups: function () {
+
+            if (groupItems.length === 0) return api;
+
+            allGroupKeys().forEach(function (key) {
+                state.collapsedGroups.add(key);
+            });
+
+            render();
+
+            return api;
+        },
+
+        getCollapsedGroups: function () {
+
+            return Array.from(state.collapsedGroups);
         },
 
         setPage: function (page) {
@@ -2815,6 +5164,10 @@ Tech.register('grid', function (el) {
                         value: filter.value
                     };
                 }),
+                groups: groupItems.map(function (group) {
+                    return { field: group.field, title: group.title };
+                }),
+                collapsedGroups: Array.from(state.collapsedGroups),
                 highlight: chatState.highlight
                     ? {
                         field: chatState.highlight.field,
@@ -2830,6 +5183,26 @@ Tech.register('grid', function (el) {
     el.techGrid = api;
 
     Tech.Grid.instances.set(el.id, api);
+
+    if (infiniteEnabled) {
+
+        el.addEventListener('click', function (ev) {
+
+            const button = ev.target.closest('.tech-infinite-more');
+
+            if (!button || button.disabled) return;
+
+            ev.preventDefault();
+
+            loadMore();
+        });
+
+        window.addEventListener('scroll', function () {
+
+            if (height === 0 && infiniteNearBottom()) loadMore();
+
+        }, { capture: true, passive: true });
+    }
 
     load();
 });

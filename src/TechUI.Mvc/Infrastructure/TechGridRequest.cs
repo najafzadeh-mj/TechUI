@@ -23,5 +23,13 @@ namespace TechUI.Mvc.Infrastructure
 
         public TechGridFilterGroup Filter { get; set; } = new();
 
+        public List<TechGridSummary> Summary { get; set; } = new();
+
+        /// <summary>
+        /// Grouping levels requested by the client. When the queryable
+        /// endpoint supports grouping, paging is applied to the top level
+        /// groups instead of rows.
+        /// </summary>
+        public List<TechGridGroup> Groups { get; set; } = new();
     }
 }

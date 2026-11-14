@@ -45,19 +45,31 @@
             .Data("searchGrid"))
         .Pageable()
         .Sortable()
+        .Sort("Id", "desc")
         .PageSize(17)
         .Height(600)
         .Filterable()
-        .Selectable()
+        .MultiSelect()
         .Resizable()
+        .Reorderable()
+        .Summary(s => s.Count())
+        .Group(g => g
+            .By(x => x.IsActive, "وضعیت فعالیت")
+            .By(x => x.Roles, "نقش"))
+        .GroupPanel()
+        .InfiniteScroll()
+        .AriaLabel("جدول کاربران نمونه")
         //.PageSizeSelector()
         .PageSizes(10, 20, 50, 100, 200)
-        .Events(e => e.Change("onGridChange"))
+        .Events(e => e
+            .Change("onGridChange")
+            .RowClick("onGridRowClick")
+            .RowDoubleClick("onGridRowDoubleClick"))
         .Toolbar(t =>
         {
             t.Create("افزودن", "onCreate");
             t.Refresh("بازخوانی");
-            t.Custom("خروجی اکسل", "onExport", "download");
+            t.Export("خروجی CSV", "filetype-csv", "users.csv");
             t.ColumnChooser();
         })
         .Chat(c => c
@@ -78,10 +90,14 @@
             c.Bound(x => x.Id)
             .Title("شناسه")
             .Filterable()
-            .Width(100);
+            .Width(100)
+            .Pinned();
 
             c.Bound(x => x.FullName)
             .Title("نام کامل");
+            c.Bound(x => x.IsActive)
+            .Title("فعال")
+            .Width(90);
             c.Template(
             "<a href='/Users/Edit/{{Id}}' class='btn btn-sm btn-primary'>ویرایش {{FullName}}</a>")
             .Title("عملیات")
@@ -152,9 +168,22 @@
 
     function onGridChange(e) {
 
-        console.log('Selected row:', e.data);
+        console.log('Selected rows:', e.selected || e.data);
+    }
 
-        //alert(`انتخاب شد: ${e.data.fullName || e.data.FullName}`);
+    function onGridRowClick(e) {
+
+        console.log('RowClick:', e.index, e.data);
+    }
+
+    function onGridRowDoubleClick(e) {
+
+        const name = e.data ? (e.data.FullName || e.data.fullName) : '';
+
+        Tech.notify('دابل‌کلیک روی ردیف: ' + name, {
+            type: 'info',
+            title: 'RowDoubleClick'
+        });
     }
 
     async function refreshGrid() 
@@ -168,10 +197,6 @@
     }
     function onCreate() {
         alert('Create clicked');
-    }
-
-    function onExport() {
-        alert('Export clicked');
     }
 
     

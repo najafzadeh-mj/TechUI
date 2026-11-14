@@ -48,6 +48,35 @@ namespace TechUI.Mvc.Grid
         }
 
         /// <summary>
+        /// Fires when a data row is clicked. Ignored for clicks on
+        /// links, buttons and form controls inside the row.
+        /// </summary>
+        public GridEventBuilder RowClick(string handler)
+        {
+            _options.RowClick = handler;
+            return this;
+        }
+
+        /// <summary>
+        /// Fires when a data row is double-clicked.
+        /// </summary>
+        public GridEventBuilder RowDoubleClick(string handler)
+        {
+            _options.RowDoubleClick = handler;
+            return this;
+        }
+
+        /// <summary>
+        /// Fires when a group is expanded or collapsed. The payload contains
+        /// the group key and the new collapsed state.
+        /// </summary>
+        public GridEventBuilder GroupToggle(string handler)
+        {
+            _options.GroupToggle = handler;
+            return this;
+        }
+
+        /// <summary>
         /// Fires when an error occurs during data loading.
         /// </summary>
         public GridEventBuilder Error(string handler)

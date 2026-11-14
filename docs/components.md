@@ -111,9 +111,12 @@ DataAnnotations را به‌صورت خودکار اعمال می‌کنند.
     .Height(600)
     .Pageable()
     .Sortable()
+    .Sort("Id", "desc")
     .Filterable()
-    .Selectable()
+    .MultiSelect()
     .Resizable()
+    .Reorderable()
+    .AriaLabel("جدول کاربران")
     .PageSize(20)
     .PageSizeSelector()
     .PageSizes(10, 20, 50, 100)
@@ -125,17 +128,26 @@ DataAnnotations را به‌صورت خودکار اعمال می‌کنند.
         .DataBinding("onGridBinding")
         .DataBound("onGridBound")
         .Change("onGridChange")
+        .RowClick("onGridRowClick")
+        .RowDoubleClick("onGridRowDoubleClick")
         .Error("onGridError"))
     .Toolbar(t =>
     {
         t.Create("افزودن", "onCreate", "plus");
         t.Refresh("بازخوانی");
-        t.Custom("خروجی اکسل", "onExport", "download");
+        t.Export("خروجی CSV", "filetype-csv", "users.csv");
         t.ColumnChooser();
     })
+    .Summary(s => s
+        .Count()
+        .Average(x => x.Id, "میانگین شناسه"))
+    .Group(g => g
+        .By(x => x.IsActive, "وضعیت فعالیت")
+        .By(x => x.FullName, "نام کامل"))
+    .GroupPanel()
     .Columns(c =>
     {
-        c.Bound(x => x.Id).Title("شناسه").Width(100).Filterable();
+        c.Bound(x => x.Id).Title("شناسه").Width(100).Filterable().Pinned();
         c.Bound(x => x.FullName).Title("نام کامل").Sortable(false);
         c.Template("<a href='/Users/Edit/{{Id}}'>{{FullName}}</a>")
             .Title("عملیات")
@@ -147,20 +159,30 @@ DataAnnotations را به‌صورت خودکار اعمال می‌کنند.
 | --- | --- |
 | `Name(string)` | `id` گرید و کلید `Tech.Grid.get` |
 | `Height(int)` | ارتفاع بدنه (پیکسل) |
-| `Pageable`, `Sortable`, `Filterable`, `Selectable`, `Resizable` | فعال‌سازی قابلیت‌ها |
+| `Pageable`, `Sortable`, `Filterable`, `Selectable`, `Resizable`, `Reorderable` | فعال‌سازی قابلیت‌ها |
+| `MultiSelect(bool = true)` | ستون چک‌باکس برای انتخاب چند ردیف؛ `Selectable` را هم فعال می‌کند |
+| `Sort(string field, string dir = "asc")` | مرتب‌سازی اولیه؛ چندبار فراخوانی = چندستونه |
+| `AriaLabel(string)` | نام دسترس‌پذیر جدول (روی ظرف و `<table>`) |
 | `PageSize(int)` | اندازه‌ی صفحه‌ی اولیه |
 | `PageSizeSelector()` / `PageSizes(params int[])` | انتخابگر اندازه‌ی صفحه؛ `PageSizes` انتخابگر را خودکار فعال می‌کند |
+| `InfiniteScroll(bool = true)` | جایگزینی صفحه‌بند با بارگذاری تدریجی؛ `PageSize` اندازه‌ی هر بخش است |
 | `DataSource(Action<GridDataSourceBuilder>)` | `Read(action, controller, area?)`, `Url(url)`, `Data(functionName)`, `Type(TechHttpMethod)` |
-| `Events(Action<GridEventBuilder>)` | `DataBinding`, `DataBound`, `Change`, `Error` |
-| `Toolbar(Action<GridToolbarBuilder>)` | `Create(text?, handler?, icon?)`, `Refresh(text?, icon?)`, `Custom(text, handler, icon?)`, `ColumnChooser(text?, icon?)` |
+| `Events(Action<GridEventBuilder>)` | `DataBinding`, `DataBound`, `Change`, `RowClick`, `RowDoubleClick`, `GroupToggle`, `Error` |
+| `Toolbar(Action<GridToolbarBuilder>)` | `Create(text?, handler?, icon?)`, `Refresh(text?, icon?)`, `ColumnChooser(text?, icon?)`, `Export(text?, icon?, fileName?)`, `Custom(text, handler, icon?)` |
 | `Chat(Action<GridChatBuilder>)` | پنل چت دستیار؛ `Url(url)`, `Title`, `Placeholder`, `Welcome`, `ButtonText`, `Icon`, `MaxLength`, `Suggestions(...)` |
+| `Summary(Action<GridSummaryBuilder<TModel>>)` | ردیف خلاصه در `tfoot`؛ `Count(field?, label?)`, `Sum/Average/Min/Max(expression, label?)` |
+| `Group(Action<GridGroupBuilder<TModel>>)` | گروه‌بندی سمت سرور روی نتیجه‌ی کامل؛ `By(expression, title?)` یا `By(field, title?)`؛ چندبار فراخوانی = گروه‌های تودرتو؛ اگر سرور پشتیبانی نکند، مرورگر صفحه‌ی جاری را گروه‌بندی می‌کند |
+| `GroupPanel(bool = true)` | دکمه و پنل «گروه‌بندی» در نوار ابزار تا کاربر فیلدها را اضافه/حذف/جابه‌جا کند؛ انتخاب کاربر در `localStorage` می‌ماند |
 | `Columns(Action<GridColumnFactory<TModel>>)` | `Bound(expression)` و `Template(string)` |
 
-`GridColumnBuilder`: `Title`, `Width`, `Sortable`, `Filterable`.
+`GridColumnBuilder`: `Title`, `Width`, `Sortable`, `Filterable`, `Pinned(bool = true)` و
+`Field(string)`. `Field` برای ستون‌های `Template` است تا بتوانند در
+مرتب‌سازی/فیلتر و خلاصه‌ها با نام یک فیلد واقعی شرکت کنند.
 
 ستون‌های `Bound` نوع داده را هم برای کلاینت ارسال می‌کنند؛ پاپ‌آپ فیلتر برای
 ستون رشته‌ای به‌صورت پیش‌فرض `contains` و برای ستون عددی، تاریخی یا بولین
-`eq` را انتخاب می‌کند و فقط عملگرهای سازگار را نشان می‌دهد. `Bound` از
+`eq` را انتخاب می‌کند و فقط عملگرهای سازگار را نشان می‌دهد. برای ستون
+بولین به‌جای ورودی متن، انتخابگر «بله / خیر» نمایش داده می‌شود. `Bound` از
 عبارت‌های تودرتو مانند `x => x.Customer.Name` هم پشتیبانی می‌کند و مسیر
 `Customer.Name` را برای فیلتر/مرتب‌سازی سمت سرور می‌فرستد.
 
@@ -177,12 +199,15 @@ public async Task<IActionResult> GridData(TechGridRequest request)
 }
 ```
 
-`TechGridResult<T>` شامل `Data`, `Total`, `Page`, `PageSize` است. فیلترها در
-`Filter` (یک گروه با `Logic` برابر `and`/`or` و لیست `Filters` شامل `Field`,
-`Operator`, `Value`) و مرتب‌سازی‌ها در `Sorts` (`Field`, `Dir`) قرار
-می‌گیرند. عملگرهای پشتیبانی‌شده:
+`TechGridResult<T>` شامل `Data`, `Total`, `Page`, `PageSize`, `Summary` و
+در حالت گروه‌بندی `Grouped` و `RowTotal` است. فیلترها در `Filter` (یک گروه
+با `Logic` برابر `and`/`or` و لیست `Filters` شامل `Field`, `Operator`,
+`Value`)، مرتب‌سازی‌ها در `Sorts` (`Field`, `Dir`)، سطوح گروه‌بندی در
+`Groups` (`Field`, `Title`) و درخواست خلاصه‌ها در `Summary` (`Field`,
+`Type`) قرار می‌گیرند. عملگرهای پشتیبانی‌شده:
 `contains`, `notcontains`, `startswith`, `endswith`, `eq`, `neq`, `gt`, `gte`,
-`lt`, `lte`, `in`, `notin`, `isnull`, `isnotnull`.
+`lt`, `lte`, `in`, `notin`, `isnull`, `isnotnull`. انواع خلاصه:
+`count`, `sum`, `average`, `min`, `max`.
 
 ### API سمت کلاینت
 
@@ -190,12 +215,25 @@ public async Task<IActionResult> GridData(TechGridRequest request)
 const grid = Tech.Grid.get('usersGrid');
 
 await grid.refresh();
-grid.selectedData();                       // ردیف انتخاب‌شده یا null
-grid.clearSelection();
+grid.selectedData();                       // ردیف انتخاب‌شده یا اولین ردیف انتخاب چندگانه
+grid.selectedRows();                       // آرایه‌ی ردیف‌های انتخاب‌شده‌ی صفحه‌ی جاری
+grid.getData();                            // ردیف‌های صفحه‌ی جاری
+grid.clearSelection();                     // پاک کردن انتخاب تکی و چندگانه
+grid.exportCsv('users.csv');               // خروجی CSV از صفحه‌ی جاری
 grid.setFilter('FullName', 'علی');         // فقط state را تغییر می‌دهد
 grid.clearFilters();
 await grid.refresh();                      // برای اعمال فیلترها
-grid.state();                              // { page, pageSize, sorts, filters, highlight }
+grid.setGroups([{ field: 'Customer.FullName', title: 'مشتری' }]);
+grid.addGroup('Status', 'وضعیت');          // افزودن یک سطح جدید
+grid.removeGroup('Status');
+grid.clearGroups();                        // حذف کامل گروه‌بندی
+grid.getGroups();                          // [{ field, title }]
+grid.expandAllGroups();                    // باز کردن همه‌ی گروه‌ها
+grid.collapseAllGroups();                  // بستن همه‌ی گروه‌ها
+grid.getCollapsedGroups();                 // کلید گروه‌های بسته
+grid.hasMore();                            // در حالت اسکرول بی‌نهایت: بخش دیگری مانده؟
+await grid.loadMore();                     // بارگذاری دستی بخش بعد
+grid.state();                              // { page, pageSize, sorts, filters, groups, collapsedGroups, highlight }
 ```
 
 `setFilter` و `clearFilters` درخواستی ارسال نمی‌کنند؛ بعد از آن‌ها
@@ -203,9 +241,231 @@ grid.state();                              // { page, pageSize, sorts, filters, 
 می‌شود و در صورت نیاز می‌توانید عملگر را به‌صورت آرگومان سوم بدهید.
 
 مرتب‌سازی چندستونه با نگه‌داشتن `Shift` و کلیک روی سرستون‌ها انجام می‌شود.
-ستون‌های مخفی‌شده و عرض ستون‌ها و اندازه‌ی صفحه در `localStorage` ذخیره
-می‌شوند. سرستون‌های قابل مرتب‌سازی و ردیف‌های قابل انتخاب با صفحه‌کلید
-(`Enter` / `Space`) هم کار می‌کنند.
+ستون‌های مخفی‌شده، عرض و ترتیب ستون‌ها و اندازه‌ی صفحه در `localStorage` ذخیره
+می‌شوند. سرستون‌های قابل مرتب‌سازی با صفحه‌کلید (`Enter` / `Space`) هم کار
+می‌کنند.
+
+### انتخاب چندگانه
+
+با `MultiSelect()` یک ستون چک‌باکس به ابتدای جدول اضافه می‌شود. چک‌باکس
+سرستون همه‌ی ردیف‌های صفحه‌ی جاری را انتخاب/لغو می‌کند و در انتخاب جزئی،
+حالت `indeterminate` می‌گیرد. کلیک روی ردیف یا `Space` روی سلول هم انتخاب
+آن ردیف را تغییر می‌دهد. `selectedRows()` ردیف‌های انتخاب‌شده را به ترتیب
+صفحه برمی‌گرداند، `selectedData()` اولین آن‌ها را می‌دهد و `clearSelection()`
+همه را پاک می‌کند. انتخاب با بارگذاری صفحه‌ی جدید بازنشانی می‌شود. payload
+رخداد `Change` در این حالت علاوه بر `data`، فیلد `selected` (آرایه‌ی
+ردیف‌ها) را هم دارد.
+
+### خروجی CSV
+
+`Export(text?, icon?, fileName?)` دکمه‌ای به نوار ابزار اضافه می‌کند که
+صفحه‌ی جاری را به‌صورت CSV دانلود می‌کند. فقط ستون‌های نمایان خروجی
+می‌گیرند؛ برای ستون‌های `Template` متن رندرشده‌ی سلول و برای ستون‌های
+`Bound` مقدار نمایش‌داده‌شده نوشته می‌شود. فایل با UTF-8 BOM ذخیره می‌شود
+تا فارسی در Excel درست باز شود و مقادیر دارای کاما/گیومه/خط جدید طبق
+استاندارد CSV escape می‌شوند. همین کار با `grid.exportCsv(fileName)` هم
+قابل انجام است. در حالت گروه‌بندی، فقط ردیف‌های نمایان (گروه‌های باز) در
+خروجی می‌آیند؛ برای خروجی کامل ابتدا `expandAllGroups()` را صدا بزنید.
+
+### ستون‌های سنجاق‌شده
+
+با `Pinned()` ستون در لبه‌ی شروع جدول ثابت می‌ماند و هنگام اسکرول افقی روی
+بقیه‌ی ستون‌ها می‌نشیند. رفتار با RTL سازگار است: در حالت راست‌به‌چپ ستون
+از سمت راست و در LTR از سمت چپ ثابت می‌شود. عرض ستون‌ها پس از هر رندر،
+تغییر عرض ستون و تغییر اندازه‌ی پنجره دوباره محاسبه می‌شود و سایه‌ی مرز فقط
+روی آخرین ستون سنجاق‌شده می‌افتد.
+
+> ستون‌های سنجاق‌شده را از ابتدای جدول انتخاب کنید؛ سنجاق‌کردن ستونی که
+> ستون‌های غیرسنجاق‌شده قبل از آن هستند باعث می‌شود آن ستون‌ها هنگام اسکرول
+> زیر ستون سنجاق‌شده پنهان شوند. اگر `MultiSelect()` فعال و حداقل یک ستون
+> سنجاق‌شده موجود باشد، ستون چک‌باکس هم خودکار سنجاق می‌شود.
+
+### ردیف خلاصه
+
+`Summary(...)` یک ردیف `tfoot` زیر داده‌ها اضافه می‌کند. `ToTechGridResultAsync`
+مقادیر را روی **همه‌ی ردیف‌های فیلترشده** (نه فقط صفحه‌ی جاری) محاسبه
+می‌کند، درخواست را در `Summary` می‌خواند و نتیجه را در
+`TechGridResult.Summary` برمی‌گرداند.
+
+```razor
+.Summary(s => s
+    .Count(label: "تعداد سفارش")
+    .Sum(x => x.Total)
+    .Average(x => x.Total, "میانگین"))
+```
+
+ستون‌های `Bound` به‌طور خودکار فیلد دارند؛ برای ستون‌های `Template` نام فیلد
+واقعی را با `Field("Total")` مشخص کنید تا خلاصه و مرتب‌سازی/فیلتر روی آن
+کار کند و ستون خلاصه زیر همان ستون رندر شود.
+
+اگر endpoint سفارشی مقداری در `Summary` برنگرداند، کلاینت خلاصه را از
+ردیف‌های صفحه‌ی جاری محاسبه می‌کند؛ در این حالت `sum`/`average` فقط همان
+صفحه را پوشش می‌دهند. برچسب پیش‌فرض هر نوع: تعداد، جمع، میانگین، کمینه،
+بیشینه. payload رخداد `DataBound` فیلد `summary` را هم دارد.
+
+### گروه‌بندی ردیف‌ها
+
+`Group(...)` گروه‌بندی را بر اساس یک یا چند فیلد تعریف می‌کند. اگر
+endpoint با `ToTechGridResultAsync` ساخته شده باشد، گروه‌بندی روی
+**کل نتیجه‌ی فیلترشده** در سرور انجام می‌شود و صفحه‌بندی روی گروه‌های
+سطح اول اعمال می‌گردد. هر فراخوانی `By` یک سطح تودرتو اضافه می‌کند:
+
+```razor
+.Group(g => g
+    .By(x => x.Customer!.FullName, "مشتری")
+    .By(x => x.Status, "وضعیت"))
+```
+
+`By` هم عبارت (مانند `Bound`) و هم نام فیلد رشته‌ای را می‌پذیرد و
+مسیرهای تودرتو مثل `Customer.FullName` را پشتیبانی می‌کند. اگر عنوان
+داده نشود، عنوان ستون هم‌نام استفاده می‌شود. مقادیر بولین به «بله/خیر» و
+مقدار خالی به «(خالی)» تبدیل می‌شوند؛ ردیف هر گروه تعداد ردیف‌های همان
+گروه را نشان می‌دهد.
+
+هر سرگروه یک دکمه‌ی باز/بسته دارد که با صفحه‌کلید هم کار می‌کند و
+`aria-expanded` را به‌روز می‌کند. وضعیت بسته‌بودن در `Set` کلاینت نگه
+داشته می‌شود و با بارگذاری مجدد صفحه حفظ می‌شود:
+
+```js
+const grid = Tech.Grid.get('ordersGrid');
+
+grid.collapseAllGroups();
+grid.expandAllGroups();
+grid.getCollapsedGroups();   // ["Customer.FullName=...","..."]
+```
+
+رخداد `GroupToggle` با `Events(e => e.GroupToggle("onGroupToggle"))` ثبت
+می‌شود و payload آن `{ sender, key, collapsed }` است؛ `key` همان کلید
+گروه (فیلد + مقدار، با پیشوند کلید والد برای گروه‌های تودرتو) است.
+
+#### گروه‌بندی سمت سرور
+
+کلاینت سطوح فعال را در درخواست با `Groups[0].Field` و به‌صورت اختیاری
+`Groups[0].Title` می‌فرستد. `ToTechGridResultAsync` این فیلدها را با
+همان `allowedFields` و قواعد مسیرهای تودرتو (`Customer.FullName`) که برای
+مرتب‌سازی و فیلتر استفاده می‌شود اعتبارسنجی می‌کند و فقط برای انواع
+ساده — عدد، رشته، `bool`، `enum`، `Guid`، `decimal`، تاریخ/زمان و مشابه
+آن — گروه می‌سازد.
+
+قرارداد نتیجه در حالت گروه‌بندی‌شده:
+
+| فیلد | معنی |
+| --- | --- |
+| `Data` | ردیف‌های همه‌ی گروه‌های سطح اولِ همان صفحه (به ترتیب گروه و سپس `Sorts`) |
+| `Total` | تعداد **گروه‌های سطح اول** (نه ردیف‌ها) |
+| `RowTotal` | تعداد کل ردیف‌های فیلترشده |
+| `Grouped` | `true` وقتی گروه‌بندی و صفحه‌بندی گروهی در سرور انجام شده باشد |
+| `PageSize` | تعداد گروه‌های سطح اول در هر صفحه؛ تعداد صفحات = `Total / PageSize` |
+
+`Summary` همچنان روی همه‌ی ردیف‌های فیلترشده محاسبه می‌شود. کلاینت در این
+حالت برچسب صفحه‌بندی را «تعداد گروه:» و شمارنده را
+«(N گروه، M رکورد)» نشان می‌دهد و `aria-rowcount` را با `RowTotal` پر
+می‌کند. اگر گروه‌بندی جلوتر از مرتب‌سازی، در هر سطح، ردیف‌ها بر اساس مقدار
+فیلد گروه صعودی و سپس `Sort`های کاربر مرتب می‌شوند.
+
+> گروه‌بندی سمت سرور «همه یا هیچ» است: اگر حتی یک سطح مجاز نباشد، قابل
+> تبدیل به عبارت LINQ نباشد یا نوعش ساده نباشد (مثلاً `List<string>`)،
+> سرور کل گروه‌بندی را نادیده می‌گیرد، `Grouped` را `false` برمی‌گرداند
+> و صفحه‌بندی عادی ردیف‌ها انجام می‌شود؛ در این حالت مرورگر فقط صفحه‌ی
+> جاری را گروه‌بندی می‌کند. گروه‌بندی روی فیلدی با تعداد مقادیر یکتا و
+> زیاد، تعداد گروه‌های صفحه را بالا می‌برد؛ صفحه‌بندی همچنان معیار
+> «تعداد گروه در صفحه» است، بنابراین ممکن است ردیف‌های یک صفحه زیاد شوند.
+
+#### تغییر گروه‌بندی توسط کاربر
+
+با `.GroupPanel()` دکمه‌ی «گروه‌بندی» به نوار ابزار اضافه می‌شود. پنل آن
+سطوح فعال را با شماره نشان می‌دهد و کاربر می‌تواند سطح جدید از بین
+ستون‌های دارای فیلد اضافه کند، سطح‌ها را بالا/پایین ببرد، یک سطح را حذف
+کند یا کل گروه‌بندی را بردارد. پنل با `Escape`، کلیک بیرون، اسکرول یا
+تغییر اندازه‌ی پنجره بسته می‌شود و فوکوس را به دکمه برمی‌گرداند.
+
+```razor
+.Group(g => g.By(x => x.Customer!.FullName, "مشتری"))
+.GroupPanel()
+```
+
+انتخاب کاربر (حتی حذف کامل گروه‌بندی) در `localStorage` با کلید
+`tech-grid-groups-<id>` ذخیره می‌شود و بر تنظیم `Group(...)` سمت سرور
+اولویت دارد؛ برای بازگشت به پیش‌فرض سرور، این کلید را پاک کنید. با
+تغییر گروه‌بندی، وضعیت بسته‌بودن گروه‌ها پاک می‌شود. همان کارها با
+`setGroups`, `addGroup`, `removeGroup`, `clearGroups` و `getGroups` هم
+قابل انجام است. تنها ستون‌هایی که فیلد دارند در پنل پیشنهاد می‌شوند.
+
+> اگر گروه‌بندی سمت سرور پشتیبانی نشود، گروه‌بندی فقط روی **صفحه‌ی جاری**
+> اعمال می‌شود. خروجی CSV نیز در هر دو حالت فقط ردیف‌های نمایان (گروه‌های
+> باز) را شامل می‌شود؛ برای خروجی کامل ابتدا `expandAllGroups()` را صدا
+> بزنید.
+
+### بارگذاری بی‌نهایت
+
+با `.InfiniteScroll()` صفحه‌بند با بارگذاری تدریجی جایگزین می‌شود: هنگام
+رسیدن بدنه‌ی جدول به انتهای خود (یا پنجره در حالت بدون `Height`)، بخش
+بعدی از سرور گرفته و به ردیف‌های قبلی اضافه می‌شود. قرارداد سرور تغییر
+نمی‌کند و همان `Page`/`PageSize` است؛ `PageSize` اندازه‌ی هر بخش است.
+
+```razor
+.PageSize(20)
+.InfiniteScroll()
+```
+
+زیر جدول نوار وضعیتی با متن «نمایش X از Y رکورد» و دکمه‌ی «بارگذاری
+بیشتر» نمایش داده می‌شود؛ دکمه برای صفحه‌کلید و وقتی اسکرول ممکن نیست
+(مثلاً بدنه کوتاه است) کاربرد دارد. پس از پایان داده‌ها پیام «همه‌ی
+ردیف‌ها نمایش داده شد.» می‌آید و `aria-rowcount` همچنان تعداد کل
+رکوردهای فیلترشده را نشان می‌دهد. متن وضعیت داخل نوار `role="status"` و
+`aria-live="polite"` دارد تا تعداد بارگذاری‌شده برای صفحه‌خوان اعلام شود؛
+دکمه بیرون از این ناحیه است تا تغییر وضعیت دکمه باعث خواندن دوباره نشود.
+
+- تغییر فیلتر، مرتب‌سازی، گروه‌بندی یا `refresh()` بارگذاری را از بخش اول
+  شروع می‌کند و ردیف‌های قبلی را دور می‌ریزد.
+- در گروه‌بندی سمت سرور، هر بخش گروه‌های بعدی را اضافه می‌کند. اگر سرور
+  گروه‌بندی را پشتیبانی نکند (گروه‌بندی کلاینتی)، بعد از هر بارگذاری همه‌ی
+  ردیف‌های بارگذاری‌شده دوباره گروه‌بندی می‌شوند تا سرگروه تکراری ساخته
+  نشود.
+- انتخاب چندگانه، بستن گروه‌ها، مرتب‌سازی ستون‌ها و ناوبری کیبورد بعد از
+  بارگذاری بخش‌های جدید هم کار می‌کنند.
+- `exportCsv` همه‌ی ردیف‌های بارگذاری‌شده را خروجی می‌دهد، نه فقط آخرین
+  بخش.
+- انتخابگر اندازه‌ی صفحه در این حالت نمایش داده نمی‌شود؛ اندازه‌ی بخش را با
+  `PageSize` یا `setPageSize` تعیین کنید.
+- این حالت ردیف‌های بارگذاری‌شده را در DOM نگه می‌دارد (مجازی‌سازی سطرها
+  انجام نمی‌شود)؛ برای مجموعه‌های بسیار بزرگ صفحه‌بندی معمولی مناسب‌تر است.
+
+```js
+const grid = Tech.Grid.get('usersGrid');
+
+grid.hasMore();              // آیا بخش دیگری مانده؟
+await grid.loadMore();       // بارگذاری دستی بخش بعد
+```
+
+### ناوبری کیبورد سلولی
+
+سلول‌های داده `tabindex` چرخشی دارند: `Tab` وارد جدول می‌شود و سپس
+`ArrowUp`/`ArrowDown` بین ردیف‌ها، `ArrowLeft`/`ArrowRight` بین ستون‌ها
+(با توجه به جهت RTL)، `Home`/`End` ابتدا/انتهای ردیف، `Ctrl+Home`/
+`Ctrl+End` ابتدا/انتهای جدول و `PageUp`/`PageDown` ده ردیف جابه‌جا می‌شوند.
+فوکوس پس از رندر مجدد (مثلاً تغییر عرض یا مخفی‌کردن ستون) روی همان سلول
+باقی می‌ماند و فوکوس داخل لینک‌ها/دکمه‌ها/ورودی‌های سلول با کلیدهای جهت
+مداخله نمی‌کند.
+
+فیلترهای فعال در نواری بالای جدول به شکل چیپ نمایش داده می‌شوند؛ هر چیپ با
+دکمه‌ی × حذف می‌شود و «پاک کردن همه» تمام فیلترها را یک‌جا برمی‌دارد. این
+نوار با تغییر state توسط API یا دستیار گرید هم به‌روز می‌شود.
+
+با `Reorderable()`، دستگیره‌ای کنار هر سرستون ظاهر می‌شود که با کشیدن آن
+ستون جابه‌جا و ترتیب جدید ذخیره می‌شود. کلیک/مرتب‌سازی و تغییر عرض با
+دستگیره‌ی resize تداخل ندارند. رندر مجدد، موقعیت اسکرول افقی و عمودی را
+حفظ می‌کند.
+
+`RowClick` و `RowDoubleClick` با payload
+`{ sender, index, row, data }` ارسال می‌شوند و کلیک روی لینک‌ها، دکمه‌ها و
+ورودی‌های داخل ردیف نادیده گرفته می‌شود.
+
+دسترسی‌پذیری: سرستون‌ها `aria-sort` (`none`/`ascending`/`descending`)،
+صفحه‌ی جاری `aria-current="page"`، جدول `aria-label`/`aria-rowcount`/
+`aria-colcount` و ظرف گرید حین بارگذاری `aria-busy` را منتشر می‌کنند.
+چک‌باکس‌های انتخاب همه/ردیف برچسب `aria-label` دارند و ردیف‌های انتخاب‌شده
+`aria-selected` می‌گیرند.
 
 عنصر گرید هم `element.techGrid` را در اختیار می‌گذارد. رخدادها با `sender`
 (نمونه‌ی گرید) ارسال می‌شوند؛ `DataBound` مقدار `data` را هم دارد.

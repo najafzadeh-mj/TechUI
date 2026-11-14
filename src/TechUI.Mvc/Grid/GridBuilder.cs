@@ -20,6 +20,7 @@ namespace TechUI.Mvc.Grid
         private bool _sortable;
         private bool _filterable;
         private bool _selectable;
+        private bool _multiSelect;
 
         private int _pageSize = 10;
         private bool _pageSizeSelector;
@@ -32,7 +33,14 @@ namespace TechUI.Mvc.Grid
         private GridChatOptions? _chat;
 
         private bool _resizable;
+        private bool _reorderable;
+        private bool _groupPanel;
+        private bool _infiniteScroll;
         private int? _height;
+        private string? _ariaLabel;
+        private readonly List<TechGridSort> _initialSorts = new();
+        private readonly List<GridSummaryItem> _summaryItems = new();
+        private readonly List<GridGroup> _groups = new();
 
         internal GridBuilder(IHtmlHelper html)
         {
@@ -75,6 +83,31 @@ namespace TechUI.Mvc.Grid
             return this;
         }
 
+        /// <summary>
+        /// Replaces the pager with an infinite scroller: the next page is
+        /// requested when the body reaches its end, and the rows are
+        /// appended to the already loaded ones. Server paging is still used;
+        /// <see cref="PageSize"/> is the size of each loaded chunk.
+        /// </summary>
+        public GridBuilder<TModel> InfiniteScroll(bool enabled = true)
+        {
+            _infiniteScroll = enabled;
+            return this;
+        }
+
+        /// <summary>
+        /// Adds a checkbox column so several rows can be selected at once.
+        /// Multi-select implies <see cref="Selectable"/>.
+        /// </summary>
+        public GridBuilder<TModel> MultiSelect(bool enabled = true)
+        {
+            _multiSelect = enabled;
+
+            if (enabled) _selectable = true;
+
+            return this;
+        }
+
         public GridBuilder<TModel> PageSize(int pageSize)
         {
             _pageSize = pageSize > 0 ? pageSize : 10;
@@ -84,6 +117,83 @@ namespace TechUI.Mvc.Grid
         public GridBuilder<TModel> Resizable(bool enabled = true)
         {
             _resizable = enabled;
+            return this;
+        }
+
+        /// <summary>
+        /// Allows reordering columns by dragging the grip in the header.
+        /// The order is persisted in localStorage.
+        /// </summary>
+        public GridBuilder<TModel> Reorderable(bool enabled = true)
+        {
+            _reorderable = enabled;
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the initial (server-rendered) sort. Call it more than once
+        /// for multi-column sorting.
+        /// </summary>
+        public GridBuilder<TModel> Sort(string field, string dir = "asc")
+        {
+            if (string.IsNullOrWhiteSpace(field)) return this;
+
+            var normalized = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase)
+                ? "desc"
+                : "asc";
+
+            _initialSorts.RemoveAll(item =>
+                string.Equals(item.Field, field, StringComparison.OrdinalIgnoreCase));
+
+            _initialSorts.Add(new TechGridSort { Field = field, Dir = normalized });
+
+            return this;
+        }
+
+        /// <summary>
+        /// Accessible name for the grid, used on the container and table.
+        /// </summary>
+        public GridBuilder<TModel> AriaLabel(string label)
+        {
+            _ariaLabel = label;
+            return this;
+        }
+
+        /// <summary>
+        /// Declares a summary footer. Aggregates are computed by the server
+        /// over the filtered data (all pages).
+        /// </summary>
+        public GridBuilder<TModel> Summary(
+            Action<GridSummaryBuilder<TModel>> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+
+            action(new GridSummaryBuilder<TModel>(_summaryItems));
+
+            return this;
+        }
+
+        /// <summary>
+        /// Declares row grouping levels. Rows of the current page are grouped
+        /// in the browser; call By multiple times for nested groups.
+        /// </summary>
+        public GridBuilder<TModel> Group(
+            Action<GridGroupBuilder<TModel>> action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+
+            action(new GridGroupBuilder<TModel>(_groups));
+
+            return this;
+        }
+
+        /// <summary>
+        /// Shows a toolbar panel that lets the user change or clear the
+        /// grouping at runtime. The user's choice is kept in localStorage.
+        /// </summary>
+        public GridBuilder<TModel> GroupPanel(bool enabled = true)
+        {
+            _groupPanel = enabled;
             return this;
         }
 
@@ -173,7 +283,17 @@ namespace TechUI.Mvc.Grid
             container.Attributes["data-sortable"] = _sortable.ToString().ToLowerInvariant();
             container.Attributes["data-filterable"] = _filterable.ToString().ToLowerInvariant();
             container.Attributes["data-selectable"] = _selectable.ToString().ToLowerInvariant();
+            container.Attributes["data-multi-select"] = _multiSelect.ToString().ToLowerInvariant();
             container.Attributes["data-resizable"] = _resizable.ToString().ToLowerInvariant();
+            container.Attributes["data-reorderable"] = _reorderable.ToString().ToLowerInvariant();
+            container.Attributes["data-group-panel"] = _groupPanel.ToString().ToLowerInvariant();
+            container.Attributes["data-infinite-scroll"] = _infiniteScroll.ToString().ToLowerInvariant();
+
+            if (!string.IsNullOrWhiteSpace(_ariaLabel))
+            {
+                container.Attributes["aria-label"] = _ariaLabel;
+                container.Attributes["data-label"] = _ariaLabel;
+            }
             container.Attributes["data-page-size"] = _pageSize.ToString();
             container.Attributes["data-page-size-selector"] = _pageSizeSelector.ToString().ToLowerInvariant();
             container.Attributes["data-page-sizes"] = string.Join(",", _pageSizeOptions);
@@ -222,9 +342,24 @@ namespace TechUI.Mvc.Grid
                 container.Attributes["data-event-change"] = _events.Change;
             }
 
+            if (!string.IsNullOrWhiteSpace(_events.RowClick))
+            {
+                container.Attributes["data-event-row-click"] = _events.RowClick;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_events.RowDoubleClick))
+            {
+                container.Attributes["data-event-row-double-click"] = _events.RowDoubleClick;
+            }
+
             if (!string.IsNullOrWhiteSpace(_events.Error))
             {
                 container.Attributes["data-event-error"] = _events.Error;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_events.GroupToggle))
+            {
+                container.Attributes["data-event-group-toggle"] = _events.GroupToggle;
             }
 
             var overlay = new TagBuilder("div");
@@ -258,6 +393,11 @@ namespace TechUI.Mvc.Grid
             var table = new TagBuilder("table");
             table.AddCssClass("table table-striped table-hover mb-0");
 
+            if (!string.IsNullOrWhiteSpace(_ariaLabel))
+            {
+                table.Attributes["aria-label"] = _ariaLabel;
+            }
+
             if (_resizable)
             {
                 table.AddCssClass("tech-grid-table-fixed");
@@ -265,6 +405,19 @@ namespace TechUI.Mvc.Grid
 
             var thead = new TagBuilder("thead");
             var trHead = new TagBuilder("tr");
+
+            if (_multiSelect)
+            {
+                var thSelect = new TagBuilder("th");
+
+                thSelect.Attributes["scope"] = "col";
+                thSelect.AddCssClass("tech-grid-select-col");
+                thSelect.InnerHtml.AppendHtml(
+                    "<input type=\"checkbox\" class=\"tech-grid-select-all\" " +
+                    "aria-label=\"انتخاب همه‌ی سطرها\">");
+
+                trHead.InnerHtml.AppendHtml(thSelect);
+            }
 
             foreach (var column in _columns)
             {
@@ -288,7 +441,8 @@ namespace TechUI.Mvc.Grid
             var trEmpty = new TagBuilder("tr");
             var tdEmpty = new TagBuilder("td");
 
-            tdEmpty.Attributes["colspan"] = Math.Max(_columns.Count, 1).ToString();
+            tdEmpty.Attributes["colspan"] =
+                (Math.Max(_columns.Count, 1) + (_multiSelect ? 1 : 0)).ToString();
             tdEmpty.AddCssClass("text-center text-muted py-4");
             tdEmpty.InnerHtml.Append("داده‌ای بارگذاری نشده است.");
 
@@ -316,6 +470,7 @@ namespace TechUI.Mvc.Grid
                 width = column.Width,
                 sortable = column.Sortable,
                 filterable = column.Filterable,
+                pinned = column.Pinned,
                 isTemplate = column.IsTemplate,
                 template = column.Template
             }));
@@ -325,10 +480,33 @@ namespace TechUI.Mvc.Grid
                 type = item.Type.ToString().ToLowerInvariant(),
                 text = item.Text,
                 handler = item.Handler,
-                icon = item.Icon
+                icon = item.Icon,
+                fileName = item.FileName
             }));
 
             var nameJson = JsonSerializer.Serialize(_name);
+
+            var sortsJson = JsonSerializer.Serialize(
+                _initialSorts.Select(sort => new
+                {
+                    field = sort.Field,
+                    dir = sort.Dir
+                }));
+
+            var summaryJson = JsonSerializer.Serialize(
+                _summaryItems.Select(item => new
+                {
+                    field = item.Field,
+                    type = item.Type.ToString().ToLowerInvariant(),
+                    label = item.Label
+                }));
+
+            var groupsJson = JsonSerializer.Serialize(
+                _groups.Select(group => new
+                {
+                    field = group.Field,
+                    title = group.Title
+                }));
 
             var chatJson = _chat is null
                 ? "null"
@@ -348,7 +526,7 @@ namespace TechUI.Mvc.Grid
                 "<script>" +
                 "window.Tech = window.Tech || {};" +
                 "Tech.GridOptions = Tech.GridOptions || {};" +
-                $"Tech.GridOptions[{nameJson}] = {{ columns: {columnsJson}, toolbar: {toolbarJson}, chat: {chatJson} }};" +
+                $"Tech.GridOptions[{nameJson}] = {{ columns: {columnsJson}, toolbar: {toolbarJson}, chat: {chatJson}, sorts: {sortsJson}, summary: {summaryJson}, groups: {groupsJson} }};" +
                 "</script>";
 
             writer.Write(stringWriter.ToString());
@@ -384,6 +562,11 @@ namespace TechUI.Mvc.Grid
             if (!string.IsNullOrWhiteSpace(item.Handler))
             {
                 button.Attributes["data-handler"] = item.Handler;
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.FileName))
+            {
+                button.Attributes["data-file-name"] = item.FileName;
             }
 
             if (!string.IsNullOrWhiteSpace(item.Icon))

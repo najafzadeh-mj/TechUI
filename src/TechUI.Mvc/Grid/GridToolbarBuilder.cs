@@ -53,6 +53,25 @@ public sealed class GridToolbarBuilder
         return this;
     }
 
+    /// <summary>
+    /// Exports the current page (visible columns only) as a CSV file.
+    /// </summary>
+    public GridToolbarBuilder Export(
+        string text = "خروجی CSV",
+        string? icon = "download",
+        string? fileName = null)
+    {
+        _items.Add(new GridToolbarItem
+        {
+            Type = GridToolbarItemType.Export,
+            Text = text,
+            Icon = icon,
+            FileName = fileName
+        });
+
+        return this;
+    }
+
     public GridToolbarBuilder Custom(
         string text,
         string handler,
