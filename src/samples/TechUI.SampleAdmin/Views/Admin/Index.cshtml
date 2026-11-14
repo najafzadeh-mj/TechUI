@@ -110,7 +110,11 @@
         <section class="admin-card">
             <div class="admin-card-header">
                 <h2>فروش بر اساس شهر</h2>
-                <small>۵ شهر برتر</small>
+                <a class="btn btn-sm btn-outline-secondary"
+                   asp-controller="Admin" asp-action="Map">
+                    <i class="bi bi-geo-alt"></i>
+                    نقشه
+                </a>
             </div>
             <div class="admin-card-body">
                 @(Html.Tech().Chart("topCities")

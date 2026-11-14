@@ -485,6 +485,12 @@ public class HomeController : Controller
     }
 
     [HttpGet]
+    public IActionResult Map()
+    {
+        return View();
+    }
+
+    [HttpGet]
     public IActionResult TreeView()
     {
         return View();

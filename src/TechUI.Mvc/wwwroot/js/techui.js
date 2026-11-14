@@ -15537,6 +15537,2653 @@ Tech.Chart.instances = Tech.Chart.instances || new Map();
 
 
 // ------------------------------------------------------------
+// Map
+// ------------------------------------------------------------
+
+(function () {
+
+    const TILE_SIZE = 256;
+    const MAX_LAT = 85.05112878;
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const TONES = ['primary', 'success', 'info', 'warning', 'danger', 'neutral'];
+    const SCALE_STEPS = [
+        1, 2, 5, 10, 20, 50, 100, 200, 500,
+        1000, 2000, 5000, 10000, 20000, 50000,
+        100000, 200000, 500000, 1000000, 2000000, 5000000
+    ];
+
+    Tech.Map = Tech.Map || {};
+    Tech.Map.instances = Tech.Map.instances || new Map();
+
+    function parseMapOptions(root) {
+
+        try {
+            return JSON.parse(root.dataset.mapOptions || '{}') || {};
+        }
+        catch (err) {
+
+            console.error('TechUI map options error:', err);
+
+            return {};
+        }
+    }
+
+    function number(value, fallback) {
+
+        const parsed = Number(value);
+
+        return isFinite(parsed) ? parsed : fallback;
+    }
+
+    function clamp(value, min, max) {
+
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function clampLat(lat) {
+
+        return clamp(number(lat, 0), -MAX_LAT, MAX_LAT);
+    }
+
+    function wrapLng(lng) {
+
+        const value = number(lng, 0);
+
+        return ((value + 180) % 360 + 360) % 360 - 180;
+    }
+
+    function shortestLngDelta(from, to) {
+
+        let delta = wrapLng(to) - wrapLng(from);
+
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+
+        return delta;
+    }
+
+    function project(lat, lng, zoom) {
+
+        const size = TILE_SIZE * Math.pow(2, zoom);
+        const sin = Math.sin(clampLat(lat) * Math.PI / 180);
+
+        return {
+            x: (wrapLng(lng) + 180) / 360 * size,
+            y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size
+        };
+    }
+
+    function unproject(x, y, zoom) {
+
+        const size = TILE_SIZE * Math.pow(2, zoom);
+        const n = Math.PI - 2 * Math.PI * y / size;
+
+        return {
+            lat: 180 / Math.PI * Math.atan(
+                0.5 * (Math.exp(n) - Math.exp(-n))),
+            lng: wrapLng(x / size * 360 - 180)
+        };
+    }
+
+    function metersPerPixel(lat, zoom) {
+
+        return 156543.03392 *
+            Math.cos(clampLat(lat) * Math.PI / 180) /
+            Math.pow(2, zoom);
+    }
+
+    function escapeHtml(value) {
+
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function screenPoint(instance, lat, lng) {
+
+        const point = project(lat, lng, instance.zoom);
+        const center = project(
+            instance.center.lat, instance.center.lng, instance.zoom);
+
+        return {
+            x: point.x - center.x + instance.width / 2 + instance.viewOffset.x,
+            y: point.y - center.y + instance.height / 2 + instance.viewOffset.y
+        };
+    }
+
+    function screenToLatLng(instance, x, y) {
+
+        const center = project(
+            instance.center.lat, instance.center.lng, instance.zoom);
+
+        return unproject(
+            center.x + x - instance.width / 2 - instance.viewOffset.x,
+            center.y + y - instance.height / 2 - instance.viewOffset.y,
+            instance.zoom);
+    }
+
+    function localPoint(instance, event) {
+
+        const rect = instance.viewport.getBoundingClientRect();
+
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+
+    function viewState(instance) {
+
+        const northWest = screenToLatLng(instance, 0, 0);
+        const southEast = screenToLatLng(
+            instance, instance.width, instance.height);
+
+        return {
+            center: {
+                lat: instance.center.lat,
+                lng: instance.center.lng
+            },
+            zoom: instance.zoom,
+            bounds: {
+                north: northWest.lat,
+                west: northWest.lng,
+                south: southEast.lat,
+                east: southEast.lng
+            }
+        };
+    }
+
+    function tileUrl(instance, x, y, zoom) {
+
+        const layer = instance.layers[instance.activeIndex] ||
+            instance.layers[0];
+
+        const subdomains = layer.subdomains &&
+            layer.subdomains.length
+            ? layer.subdomains
+            : (Array.isArray(instance.options.subdomains)
+                ? instance.options.subdomains
+                : []);
+
+        const subdomain = subdomains.length
+            ? subdomains[Math.abs(x + y) % subdomains.length]
+            : '';
+
+        return String(layer.url)
+            .replace(/\{s\}/g, subdomain)
+            .replace(/\{z\}/g, zoom)
+            .replace(/\{x\}/g, x)
+            .replace(/\{y\}/g, y)
+            .replace(/\{-y\}/g, Math.pow(2, zoom) - 1 - y);
+    }
+
+    function createButton(icon, label, extraClass) {
+
+        const button = document.createElement('button');
+
+        button.type = 'button';
+        button.className = 'tech-map-btn' +
+            (extraClass ? ' ' + extraClass : '');
+        button.setAttribute('aria-label', label);
+        button.title = label;
+
+        const iconElement = document.createElement('i');
+
+        iconElement.className = 'bi bi-' + icon;
+        iconElement.setAttribute('aria-hidden', 'true');
+
+        button.appendChild(iconElement);
+
+        return button;
+    }
+
+    function createControlGroup() {
+
+        const group = document.createElement('div');
+
+        group.className = 'tech-map-control tech-map-control-group';
+
+        return group;
+    }
+
+    // --------------------------------------------------------
+    // Events
+    // --------------------------------------------------------
+
+    function emit(instance, name, payload) {
+
+        const events = instance.options.events || {};
+        const handlerName = events[name];
+
+        if (handlerName && typeof window[handlerName] === 'function') {
+
+            try {
+                window[handlerName](payload, instance.api);
+            }
+            catch (err) {
+                console.error('TechUI map handler error:', err);
+            }
+        }
+
+        Tech.trigger(
+            instance.element,
+            name.charAt(0).toUpperCase() + name.slice(1),
+            payload);
+
+        const listeners = instance.listeners[name];
+
+        if (listeners) {
+
+            listeners.slice().forEach(function (listener) {
+
+                try {
+                    listener(payload, instance.api);
+                }
+                catch (err) {
+                    console.error('TechUI map listener error:', err);
+                }
+            });
+        }
+    }
+
+    function addListener(instance, name, handler) {
+
+        if (!name || typeof handler !== 'function') return;
+
+        const list = instance.listeners[name] ||
+            (instance.listeners[name] = []);
+
+        list.push(handler);
+    }
+
+    function removeListener(instance, name, handler) {
+
+        const list = instance.listeners[name];
+
+        if (!list) return;
+
+        const index = list.indexOf(handler);
+
+        if (index >= 0) list.splice(index, 1);
+    }
+
+    // --------------------------------------------------------
+    // View state
+    // --------------------------------------------------------
+
+    function cancelAnimation(instance) {
+
+        if (instance.animation) {
+
+            cancelAnimationFrame(instance.animation);
+            instance.animation = null;
+        }
+    }
+
+    function settleNow(instance) {
+
+        clearTimeout(instance.settleTimer);
+        instance.settleTimer = null;
+
+        emit(instance, 'moveEnd', viewState(instance));
+
+        if (instance.pendingZoomEvent) {
+
+            instance.pendingZoomEvent = false;
+
+            emit(instance, 'zoomEnd', viewState(instance));
+        }
+    }
+
+    function markViewChanged(instance, zoomChanged, delay) {
+
+        if (zoomChanged) instance.pendingZoomEvent = true;
+
+        clearTimeout(instance.settleTimer);
+
+        instance.settleTimer = setTimeout(function () {
+
+            instance.settleTimer = null;
+
+            emit(instance, 'moveEnd', viewState(instance));
+
+            if (instance.pendingZoomEvent) {
+
+                instance.pendingZoomEvent = false;
+
+                emit(instance, 'zoomEnd', viewState(instance));
+            }
+        }, delay === undefined ? 180 : delay);
+    }
+
+    function commitViewOffset(instance) {
+
+        if (!instance.viewOffset.x && !instance.viewOffset.y) return;
+
+        const center = project(
+            instance.center.lat, instance.center.lng, instance.zoom);
+
+        const target = unproject(
+            center.x - instance.viewOffset.x,
+            center.y - instance.viewOffset.y,
+            instance.zoom);
+
+        instance.center = { lat: target.lat, lng: target.lng };
+        instance.viewOffset = { x: 0, y: 0 };
+
+        render(instance);
+    }
+
+    function animateView(instance, target, duration) {
+
+        cancelAnimation(instance);
+
+        const from = {
+            lat: instance.center.lat,
+            lng: instance.center.lng,
+            zoom: instance.zoom
+        };
+
+        const deltaLng = shortestLngDelta(from.lng, target.lng);
+        const start = window.performance && performance.now
+            ? performance.now()
+            : Date.now();
+
+        duration = duration || 260;
+
+        instance.pendingZoomEvent =
+            Math.abs(target.zoom - from.zoom) > 0.0001;
+        instance.viewOffset = { x: 0, y: 0 };
+
+        function step(now) {
+
+            const raw = Math.min(1, (now - start) / duration);
+            const eased = 1 - Math.pow(1 - raw, 3);
+
+            instance.center = {
+                lat: from.lat + (target.lat - from.lat) * eased,
+                lng: wrapLng(from.lng + deltaLng * eased)
+            };
+
+            instance.zoom = from.zoom + (target.zoom - from.zoom) * eased;
+
+            render(instance);
+
+            if (raw < 1) {
+                instance.animation = requestAnimationFrame(step);
+            }
+            else {
+                instance.animation = null;
+                settleNow(instance);
+            }
+        }
+
+        instance.animation = requestAnimationFrame(step);
+    }
+
+    function applyView(instance, latlng, zoom, animate) {
+
+        cancelAnimation(instance);
+
+        const target = {
+            lat: clampLat(number(latlng && latlng.lat, instance.center.lat)),
+            lng: wrapLng(number(latlng && latlng.lng, instance.center.lng)),
+            zoom: clamp(
+                number(zoom, instance.zoom),
+                instance.minZoom,
+                instance.maxZoom)
+        };
+
+        if (animate) {
+
+            animateView(
+                instance,
+                target,
+                typeof animate === 'number' ? animate : 260);
+
+            return;
+        }
+
+        instance.pendingZoomEvent =
+            Math.abs(target.zoom - instance.zoom) > 0.0001;
+        instance.center = { lat: target.lat, lng: target.lng };
+        instance.zoom = target.zoom;
+        instance.viewOffset = { x: 0, y: 0 };
+
+        render(instance);
+        settleNow(instance);
+    }
+
+    function zoomAround(instance, anchorX, anchorY, zoom) {
+
+        const targetZoom = clamp(
+            zoom, instance.minZoom, instance.maxZoom);
+
+        const latlng = screenToLatLng(instance, anchorX, anchorY);
+        const anchor = project(latlng.lat, latlng.lng, targetZoom);
+
+        const center = unproject(
+            anchor.x + (instance.width / 2 - anchorX),
+            anchor.y + (instance.height / 2 - anchorY),
+            targetZoom);
+
+        instance.pendingZoomEvent =
+            Math.abs(targetZoom - instance.zoom) > 0.0001;
+        instance.zoom = targetZoom;
+        instance.center = { lat: center.lat, lng: center.lng };
+        instance.viewOffset = { x: 0, y: 0 };
+
+        render(instance);
+    }
+
+    function zoomAroundAnimated(instance, anchorX, anchorY, zoom) {
+
+        const targetZoom = clamp(zoom, instance.minZoom, instance.maxZoom);
+        const latlng = screenToLatLng(instance, anchorX, anchorY);
+        const anchor = project(latlng.lat, latlng.lng, targetZoom);
+
+        const center = unproject(
+            anchor.x + (instance.width / 2 - anchorX),
+            anchor.y + (instance.height / 2 - anchorY),
+            targetZoom);
+
+        animateView(instance, {
+            lat: center.lat,
+            lng: center.lng,
+            zoom: targetZoom
+        }, 220);
+    }
+
+    function panByPixels(instance, dx, dy, animate) {
+
+        const center = project(
+            instance.center.lat, instance.center.lng, instance.zoom);
+
+        const target = unproject(
+            center.x + dx, center.y + dy, instance.zoom);
+
+        applyView(instance, target, instance.zoom, animate);
+    }
+
+    function zoomIn(instance) {
+
+        const target = Math.min(
+            instance.maxZoom,
+            Math.floor(instance.zoom + 0.001) + 1);
+
+        animateView(instance, {
+            lat: instance.center.lat,
+            lng: instance.center.lng,
+            zoom: target
+        }, 220);
+    }
+
+    function zoomOut(instance) {
+
+        const target = Math.max(
+            instance.minZoom,
+            Math.ceil(instance.zoom - 0.001) - 1);
+
+        animateView(instance, {
+            lat: instance.center.lat,
+            lng: instance.center.lng,
+            zoom: target
+        }, 220);
+    }
+
+    // --------------------------------------------------------
+    // Markers
+    // --------------------------------------------------------
+
+    function addMarkerRecord(instance, config) {
+
+        config = config || {};
+
+        let id = config.id
+            ? String(config.id)
+            : 'marker-' + (++instance.markerCount);
+
+        while (instance.markers.has(id)) {
+
+            id = id + '-' + (++instance.markerCount);
+        }
+
+        const marker = {
+            id: id,
+            lat: clampLat(number(config.lat, instance.center.lat)),
+            lng: wrapLng(number(config.lng, instance.center.lng)),
+            title: config.title ? String(config.title) : '',
+            popup: config.popup ? String(config.popup) : '',
+            icon: String(config.icon || 'geo-alt-fill')
+                .replace(/^bi-/, ''),
+            tone: TONES.indexOf(config.tone) >= 0
+                ? config.tone
+                : 'primary',
+            draggable: !!config.draggable,
+            initialOpen: !!config.open,
+            dragged: false,
+            element: null,
+            iconElement: null
+        };
+
+        const button = document.createElement('button');
+
+        button.type = 'button';
+        button.className = 'tech-map-marker tech-map-marker-' + marker.tone;
+        button.dataset.markerId = marker.id;
+        button.setAttribute(
+            'aria-label', marker.title || 'نشانگر نقشه');
+        button.setAttribute('aria-expanded', 'false');
+
+        if (marker.title) {
+            button.title = marker.title;
+        }
+
+        const pin = document.createElement('span');
+
+        pin.className = 'tech-map-marker-pin';
+
+        const icon = document.createElement('i');
+
+        icon.className = 'bi bi-' + marker.icon;
+        icon.setAttribute('aria-hidden', 'true');
+
+        pin.appendChild(icon);
+        button.appendChild(pin);
+
+        marker.element = button;
+        marker.iconElement = icon;
+
+        button.addEventListener('click', function (event) {
+
+            event.stopPropagation();
+
+            if (marker.dragged) {
+
+                marker.dragged = false;
+
+                return;
+            }
+
+            if (marker.popup) {
+                openPopup(instance, marker.id);
+            }
+
+            emit(instance, 'markerClick', {
+                id: marker.id,
+                lat: marker.lat,
+                lng: marker.lng,
+                title: marker.title
+            });
+        });
+
+        if (marker.draggable) {
+            wireMarkerDrag(instance, marker);
+        }
+
+        instance.markers.set(marker.id, marker);
+        instance.markersLayer.appendChild(button);
+
+        const handle = {
+            id: marker.id,
+            element: button,
+            setLatLng: function (lat, lng) {
+
+                marker.lat = clampLat(number(lat, marker.lat));
+                marker.lng = wrapLng(number(lng, marker.lng));
+
+                render(instance);
+
+                return handle;
+            },
+            getLatLng: function () {
+
+                return { lat: marker.lat, lng: marker.lng };
+            },
+            setIcon: function (name) {
+
+                marker.icon = String(name || 'geo-alt-fill')
+                    .replace(/^bi-/, '');
+                marker.iconElement.className = 'bi bi-' + marker.icon;
+
+                return handle;
+            },
+            openPopup: function () {
+
+                openPopup(instance, marker.id);
+
+                return handle;
+            },
+            closePopup: function () {
+
+                closePopup(instance);
+
+                return handle;
+            },
+            remove: function () {
+
+                removeMarkerRecord(instance, marker.id);
+            }
+        };
+
+        marker.handle = handle;
+
+        return handle;
+    }
+
+    function wireMarkerDrag(instance, marker) {
+
+        const button = marker.element;
+        let dragState = null;
+
+        button.addEventListener('pointerdown', function (event) {
+
+            if (event.button !== undefined && event.button !== 0) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            closePopup(instance);
+
+            const start = project(
+                marker.lat, marker.lng, instance.zoom);
+
+            const origin = { x: event.clientX, y: event.clientY };
+
+            dragState = { moved: false };
+
+            button.classList.add('is-dragging');
+
+            try {
+                button.setPointerCapture(event.pointerId);
+            }
+            catch {
+                // Pointer capture is a progressive enhancement.
+            }
+
+            function onMove(moveEvent) {
+
+                const dx = moveEvent.clientX - origin.x;
+                const dy = moveEvent.clientY - origin.y;
+
+                if (!dragState.moved &&
+                    Math.abs(dx) + Math.abs(dy) > 3) {
+
+                    dragState.moved = true;
+                }
+
+                if (!dragState.moved) return;
+
+                const target = unproject(
+                    start.x + dx, start.y + dy, instance.zoom);
+
+                marker.lat = target.lat;
+                marker.lng = target.lng;
+
+                render(instance);
+            }
+
+            function onUp() {
+
+                button.removeEventListener('pointermove', onMove);
+                button.removeEventListener('pointerup', onUp);
+                button.removeEventListener('pointercancel', onUp);
+                button.classList.remove('is-dragging');
+
+                const moved = dragState ? dragState.moved : false;
+
+                dragState = null;
+                marker.dragged = moved;
+
+                if (moved) {
+
+                    emit(instance, 'markerDragEnd', {
+                        id: marker.id,
+                        lat: marker.lat,
+                        lng: marker.lng
+                    });
+                }
+            }
+
+            button.addEventListener('pointermove', onMove);
+            button.addEventListener('pointerup', onUp);
+            button.addEventListener('pointercancel', onUp);
+        });
+    }
+
+    function removeMarkerRecord(instance, id) {
+
+        const marker = instance.markers.get(id);
+
+        if (!marker) return false;
+
+        if (instance.popupMarkerId === id) {
+            closePopup(instance);
+        }
+
+        marker.element.remove();
+        instance.markers.delete(id);
+
+        return true;
+    }
+
+    function openPopup(instance, markerId) {
+
+        const marker = instance.markers.get(markerId);
+
+        if (!marker) return;
+
+        instance.popupMarkerId = markerId;
+        instance.popupContent.innerHTML = marker.popup || '';
+        instance.popup.hidden = false;
+
+        instance.markers.forEach(function (item) {
+
+            item.element.setAttribute(
+                'aria-expanded',
+                item.id === markerId ? 'true' : 'false');
+        });
+
+        positionPopup(instance);
+    }
+
+    function closePopup(instance) {
+
+        if (!instance.popupMarkerId) {
+
+            instance.popup.hidden = true;
+
+            return;
+        }
+
+        const marker = instance.markers.get(instance.popupMarkerId);
+
+        if (marker) {
+            marker.element.setAttribute('aria-expanded', 'false');
+        }
+
+        instance.popupMarkerId = null;
+        instance.popup.hidden = true;
+        instance.popupContent.innerHTML = '';
+    }
+
+    function positionPopup(instance) {
+
+        if (!instance.popupMarkerId) return;
+
+        const marker = instance.markers.get(instance.popupMarkerId);
+
+        if (!marker) {
+            closePopup(instance);
+
+            return;
+        }
+
+        const point = screenPoint(instance, marker.lat, marker.lng);
+        const popup = instance.popup;
+        const padding = 10;
+        const half = popup.offsetWidth / 2;
+
+        let left = point.x;
+
+        if (left - half < padding) left = half + padding;
+        if (left + half > instance.width - padding) {
+            left = instance.width - half - padding;
+        }
+
+        const below = point.y < popup.offsetHeight + 34;
+        let top = point.y;
+
+        if (below) {
+
+            top = Math.min(
+                top,
+                instance.height - popup.offsetHeight - padding);
+        }
+
+        popup.style.left = left + 'px';
+        popup.style.top = top + 'px';
+        popup.classList.toggle('tech-map-popup-below', below);
+    }
+
+    // --------------------------------------------------------
+    // Locate
+    // --------------------------------------------------------
+
+    function showLocateMarker(instance, lat, lng, accuracy) {
+
+        if (!instance.locate) {
+
+            const element = document.createElement('div');
+
+            element.className = 'tech-map-locate-marker';
+            element.setAttribute('aria-hidden', 'true');
+            element.innerHTML =
+                '<span class="tech-map-locate-accuracy"></span>' +
+                '<span class="tech-map-locate-dot"></span>';
+
+            instance.viewport.appendChild(element);
+            instance.locate = { element: element };
+        }
+
+        instance.locate.lat = lat;
+        instance.locate.lng = lng;
+        instance.locate.accuracy = accuracy;
+        instance.locate.element.hidden = false;
+
+        updateLocateMarker(instance);
+    }
+
+    function updateLocateMarker(instance) {
+
+        if (!instance.locate) return;
+
+        const point = screenPoint(
+            instance, instance.locate.lat, instance.locate.lng);
+
+        instance.locate.element.style.transform =
+            'translate3d(' + point.x + 'px,' + point.y + 'px,0)';
+
+        const accuracy = number(instance.locate.accuracy, 0);
+        const diameter = accuracy > 0
+            ? accuracy / Math.max(
+                0.01,
+                metersPerPixel(instance.center.lat, instance.zoom)) * 2
+            : 0;
+
+        instance.locate.element.style.setProperty(
+            '--tech-map-accuracy', Math.round(diameter) + 'px');
+    }
+
+    function locate(instance) {
+
+        if (!navigator.geolocation) {
+
+            Tech.notify(
+                'مرورگر از موقعیت‌یابی پشتیبانی نمی‌کند.',
+                { type: 'warning' });
+
+            return Promise.resolve(null);
+        }
+
+        if (instance.locateButton) {
+            instance.locateButton.classList.add('is-busy');
+        }
+
+        return new Promise(function (resolve) {
+
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+
+                    if (instance.locateButton) {
+                        instance.locateButton.classList.remove('is-busy');
+                    }
+
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy || 0;
+
+                    showLocateMarker(instance, lat, lng, accuracy);
+                    applyView(
+                        instance,
+                        { lat: lat, lng: lng },
+                        Math.max(instance.zoom, 15),
+                        true);
+
+                    emit(instance, 'locate', {
+                        lat: lat,
+                        lng: lng,
+                        accuracy: accuracy
+                    });
+
+                    resolve({ lat: lat, lng: lng, accuracy: accuracy });
+                },
+                function () {
+
+                    if (instance.locateButton) {
+                        instance.locateButton.classList.remove('is-busy');
+                    }
+
+                    Tech.notify(
+                        'دسترسی به موقعیت مکانی ممکن نیست.',
+                        { type: 'danger' });
+
+                    emit(instance, 'locate', { error: 'unavailable' });
+
+                    resolve(null);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000
+                });
+        });
+    }
+
+    // --------------------------------------------------------
+    // Search
+    // --------------------------------------------------------
+
+    function hideSearchResults(instance) {
+
+        if (instance.searchResults) {
+            instance.searchResults.hidden = true;
+        }
+    }
+
+    function showSearchStatus(instance, message) {
+
+        const list = instance.searchResults;
+
+        if (!list) return;
+
+        list.innerHTML = '';
+
+        const status = document.createElement('div');
+
+        status.className = 'tech-map-search-empty';
+        status.textContent = message;
+
+        list.appendChild(status);
+        list.hidden = false;
+    }
+
+    function runSearch(instance, query) {
+
+        const list = instance.searchResults;
+
+        if (!list || !query) return;
+
+        if (instance.searchController) {
+            instance.searchController.abort();
+        }
+
+        instance.searchController = new AbortController();
+
+        showSearchStatus(instance, 'در حال جستجو…');
+
+        let url;
+
+        try {
+
+            url = new URL(
+                instance.options.searchUrl, window.location.href);
+        }
+        catch {
+
+            showSearchStatus(instance, 'آدرس جستجو معتبر نیست.');
+
+            return;
+        }
+
+        url.searchParams.set('format', 'jsonv2');
+        url.searchParams.set('limit', '6');
+        url.searchParams.set('accept-language', 'fa');
+        url.searchParams.set('q', query);
+
+        fetch(url.toString(), {
+            signal: instance.searchController.signal,
+            headers: { Accept: 'application/json' }
+        })
+            .then(function (response) {
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                return response.json();
+            })
+            .then(function (data) {
+
+                instance.searchController = null;
+
+                const results = Array.isArray(data) ? data : [];
+
+                renderSearchResults(instance, results, query);
+
+                emit(instance, 'search', {
+                    query: query,
+                    results: results.map(function (result) {
+
+                        return {
+                            name: result.name || '',
+                            displayName: result.display_name || '',
+                            lat: number(result.lat, 0),
+                            lng: number(result.lon, 0)
+                        };
+                    })
+                });
+            })
+            .catch(function (err) {
+
+                if (err && err.name === 'AbortError') return;
+
+                instance.searchController = null;
+
+                showSearchStatus(
+                    instance,
+                    'جستجو ناموفق بود. اتصال اینترنت را بررسی کنید.');
+            });
+    }
+
+    function renderSearchResults(instance, results, query) {
+
+        const list = instance.searchResults;
+
+        if (!list) return;
+
+        list.innerHTML = '';
+
+        if (!results.length) {
+
+            showSearchStatus(instance, 'نتیجه‌ای پیدا نشد.');
+
+            return;
+        }
+
+        results.forEach(function (result) {
+
+            const lat = number(result.lat, NaN);
+            const lng = number(result.lon, NaN);
+
+            if (!isFinite(lat) || !isFinite(lng)) return;
+
+            const item = document.createElement('button');
+
+            item.type = 'button';
+            item.className = 'tech-map-search-item';
+
+            const title = document.createElement('span');
+
+            title.className = 'tech-map-search-item-title';
+            title.textContent = result.name ||
+                String(result.display_name || '').split(',')[0] ||
+                query;
+
+            const subtitle = document.createElement('span');
+
+            subtitle.className = 'tech-map-search-item-sub';
+            subtitle.textContent = result.display_name || '';
+
+            item.appendChild(title);
+            item.appendChild(subtitle);
+
+            item.addEventListener('click', function () {
+
+                list.hidden = true;
+
+                selectSearchResult(instance, result, {
+                    lat: lat,
+                    lng: lng
+                });
+            });
+
+            list.appendChild(item);
+        });
+
+        list.hidden = false;
+    }
+
+    function selectSearchResult(instance, result, latlng) {
+
+        removeMarkerRecord(instance, '__search');
+
+        const name = result.name ||
+            String(result.display_name || '').split(',')[0] ||
+            'نتیجه جستجو';
+
+        const popup = '<div class="tech-map-popup-title">' +
+            escapeHtml(name) + '</div>' +
+            '<div class="tech-map-popup-text">' +
+            escapeHtml(result.display_name || '') + '</div>';
+
+        const handle = addMarkerRecord(instance, {
+            id: '__search',
+            lat: latlng.lat,
+            lng: latlng.lng,
+            title: name,
+            popup: popup,
+            icon: 'search',
+            tone: 'danger'
+        });
+
+        render(instance);
+
+        const box = Array.isArray(result.boundingbox)
+            ? result.boundingbox.map(Number)
+            : null;
+
+        const hasBox = box && box.length === 4 &&
+            box.every(function (value) { return isFinite(value); }) &&
+            (box[1] - box[0] > 0.0005 || box[3] - box[2] > 0.0005);
+
+        if (hasBox) {
+
+            fitBounds(instance, [
+                [box[0], box[2]],
+                [box[1], box[3]]
+            ], { maxZoom: 16 });
+        }
+        else {
+
+            applyView(
+                instance,
+                latlng,
+                Math.max(instance.zoom, 15),
+                true);
+        }
+
+        openPopup(instance, handle.id);
+    }
+
+    function fitBounds(instance, points, options) {
+
+        const items = (points || []).map(function (point) {
+
+            if (Array.isArray(point)) {
+
+                return { lat: number(point[0], 0), lng: number(point[1], 0) };
+            }
+
+            return point || {};
+        });
+
+        const valid = items.filter(function (item) {
+
+            return isFinite(number(item.lat, NaN)) &&
+                isFinite(number(item.lng, NaN));
+        });
+
+        if (!valid.length) return;
+
+        const maxZoom = number(options && options.maxZoom, instance.maxZoom);
+
+        if (valid.length === 1) {
+
+            applyView(
+                instance,
+                valid[0],
+                Math.min(maxZoom, 15),
+                true);
+
+            return;
+        }
+
+        let south = 90, north = -90, west = 180, east = -180;
+
+        valid.forEach(function (item) {
+
+            south = Math.min(south, item.lat);
+            north = Math.max(north, item.lat);
+            west = Math.min(west, item.lng);
+            east = Math.max(east, item.lng);
+        });
+
+        const southWest = project(south, west, 0);
+        const northEast = project(north, east, 0);
+
+        const worldWidth = Math.abs(northEast.x - southWest.x);
+        const worldHeight = Math.abs(northEast.y - southWest.y);
+
+        if (worldWidth < 0.000001 && worldHeight < 0.000001) {
+
+            applyView(instance, {
+                lat: (south + north) / 2,
+                lng: (west + east) / 2
+            }, Math.min(maxZoom, 15), true);
+
+            return;
+        }
+
+        const zoomX = worldWidth >= 0.000001
+            ? Math.log2((instance.width * 0.85) / worldWidth)
+            : Infinity;
+
+        const zoomY = worldHeight >= 0.000001
+            ? Math.log2((instance.height * 0.85) / worldHeight)
+            : Infinity;
+
+        const zoom = clamp(
+            Math.floor(Math.min(zoomX, zoomY)),
+            instance.minZoom,
+            maxZoom);
+
+        applyView(instance, {
+            lat: (south + north) / 2,
+            lng: (west + east) / 2
+        }, zoom, true);
+    }
+
+    // --------------------------------------------------------
+    // Base layers
+    // --------------------------------------------------------
+
+    function updateLayerButtons(instance) {
+
+        (instance.layerButtons || []).forEach(function (entry) {
+
+            const active = entry.index === instance.activeIndex;
+
+            entry.element.classList.toggle('is-active', active);
+            entry.element.setAttribute(
+                'aria-pressed', active ? 'true' : 'false');
+        });
+    }
+
+    function setBaseLayer(instance, value) {
+
+        let index = -1;
+
+        if (typeof value === 'number') {
+
+            index = value;
+        }
+        else {
+
+            const text = String(value === null || value === undefined
+                ? ''
+                : value);
+
+            index = instance.layers.findIndex(function (layer, i) {
+
+                return String(i) === text ||
+                    layer.name === text ||
+                    layer.url === text;
+            });
+        }
+
+        if (index < 0 || index >= instance.layers.length) return false;
+
+        instance.activeIndex = index;
+        instance.tilesLayer.innerHTML = '';
+        instance.tiles.clear();
+        instance.tileZoom = null;
+
+        instance.attribution.innerHTML =
+            instance.layers[index].attribution || '';
+        instance.attribution.hidden = !instance.layers[index].attribution;
+
+        const limit = instance.layers[index].maxZoom;
+
+        instance.maxZoom = Math.max(
+            instance.minZoom,
+            Math.min(
+                number(instance.options.maxZoom, 22),
+                limit || 22));
+
+        updateLayerButtons(instance);
+
+        if (instance.zoom > instance.maxZoom) {
+            applyView(instance, instance.center, instance.maxZoom, false);
+        }
+        else {
+            render(instance);
+        }
+
+        return true;
+    }
+
+    // --------------------------------------------------------
+    // Render
+    // --------------------------------------------------------
+
+    function renderTiles(instance, tileZoom, scale, offsetX, offsetY) {
+
+        const count = Math.pow(2, tileZoom);
+        const left = offsetX / scale;
+        const top = offsetY / scale;
+        const right = (offsetX + instance.width) / scale;
+        const bottom = (offsetY + instance.height) / scale;
+
+        const minX = Math.floor(left / TILE_SIZE);
+        const maxX = Math.floor((right - 1) / TILE_SIZE);
+        const minY = Math.max(0, Math.floor(top / TILE_SIZE));
+        const maxY = Math.min(
+            count - 1,
+            Math.floor((bottom - 1) / TILE_SIZE));
+
+        instance.tiles.forEach(function (tile) {
+            tile.used = false;
+        });
+
+        if (maxY < minY) return;
+
+        for (let y = minY; y <= maxY; y++) {
+
+            for (let x = minX; x <= maxX; x++) {
+
+                const wrappedX = ((x % count) + count) % count;
+                const key = wrappedX + ':' + y + ':' + tileZoom;
+
+                let tile = instance.tiles.get(key);
+
+                if (!tile) {
+
+                    const img = document.createElement('img');
+
+                    img.className = 'tech-map-tile';
+                    img.alt = '';
+                    img.draggable = false;
+                    img.decoding = 'async';
+                    img.src = tileUrl(
+                        instance, wrappedX, y, tileZoom);
+
+                    if (img.complete) {
+                        img.classList.add('is-loaded');
+                    }
+
+                    img.addEventListener('load', function () {
+                        img.classList.add('is-loaded');
+                    });
+
+                    tile = { element: img, used: true };
+
+                    instance.tiles.set(key, tile);
+                    instance.tilesLayer.appendChild(img);
+                }
+
+                tile.used = true;
+                tile.element.style.left = (x * TILE_SIZE) + 'px';
+                tile.element.style.top = (y * TILE_SIZE) + 'px';
+            }
+        }
+
+        instance.tiles.forEach(function (tile, key) {
+
+            if (tile.used) return;
+
+            tile.element.remove();
+            instance.tiles.delete(key);
+        });
+    }
+
+    function buildShapes(instance) {
+
+        instance.shapes = [];
+        instance.shapesLayer.innerHTML = '';
+
+        (instance.options.polylines || []).forEach(function (shape) {
+
+            const element = document.createElementNS(SVG_NS, 'polyline');
+
+            element.setAttribute('fill', 'none');
+            element.setAttribute('stroke-linecap', 'round');
+            element.setAttribute('stroke-linejoin', 'round');
+
+            instance.shapesLayer.appendChild(element);
+            instance.shapes.push({
+                type: 'polyline',
+                shape: shape,
+                element: element
+            });
+        });
+
+        (instance.options.polygons || []).forEach(function (shape) {
+
+            const element = document.createElementNS(SVG_NS, 'polygon');
+
+            element.setAttribute('stroke-linejoin', 'round');
+            element.setAttribute(
+                'fill-opacity',
+                String(clamp(number(shape.fillOpacity, 0.18), 0, 1)));
+
+            instance.shapesLayer.appendChild(element);
+            instance.shapes.push({
+                type: 'polygon',
+                shape: shape,
+                element: element
+            });
+        });
+
+        (instance.options.circles || []).forEach(function (circle) {
+
+            const element = document.createElementNS(SVG_NS, 'circle');
+
+            element.setAttribute(
+                'fill-opacity',
+                String(clamp(number(circle.fillOpacity, 0.15), 0, 1)));
+
+            instance.shapesLayer.appendChild(element);
+            instance.shapes.push({
+                type: 'circle',
+                circle: circle,
+                element: element
+            });
+        });
+    }
+
+    function renderShapes(instance) {
+
+        instance.shapes.forEach(function (record) {
+
+            if (record.type === 'circle') {
+
+                const circle = record.circle;
+                const point = screenPoint(
+                    instance,
+                    number(circle.lat, 0),
+                    number(circle.lng, 0));
+
+                const radius = Math.max(
+                    1,
+                    number(circle.radius, 0) /
+                    Math.max(
+                        0.01,
+                        metersPerPixel(instance.center.lat, instance.zoom)));
+
+                const color = circle.color || '#2563eb';
+
+                record.element.setAttribute('cx', String(point.x));
+                record.element.setAttribute('cy', String(point.y));
+                record.element.setAttribute('r', String(radius));
+                record.element.style.stroke = color;
+                record.element.style.fill = color;
+
+                return;
+            }
+
+            const shape = record.shape;
+            const points = (shape.points || []).map(function (point) {
+
+                const screen = screenPoint(
+                    instance,
+                    number(point[0], 0),
+                    number(point[1], 0));
+
+                return screen.x.toFixed(1) + ',' + screen.y.toFixed(1);
+            }).join(' ');
+
+            const color = shape.color || '#2563eb';
+
+            record.element.setAttribute('points', points);
+            record.element.style.stroke = color;
+            record.element.style.strokeWidth =
+                number(shape.weight, 3) + 'px';
+            record.element.style.strokeOpacity =
+                String(clamp(number(shape.opacity, 0.9), 0, 1));
+
+            if (record.type === 'polygon') {
+                record.element.style.fill = color;
+            }
+        });
+    }
+
+    function updateScale(instance) {
+
+        if (!instance.scaleBar) return;
+
+        const mpp = metersPerPixel(
+            instance.center.lat, instance.zoom);
+
+        if (!isFinite(mpp) || mpp <= 0) return;
+
+        const target = mpp * 84;
+        let meters = SCALE_STEPS[0];
+
+        SCALE_STEPS.forEach(function (step) {
+
+            if (step <= target) meters = step;
+        });
+
+        const width = clamp(meters / mpp, 24, 140);
+
+        instance.scaleBar.style.width = Math.round(width) + 'px';
+        instance.scaleLabel.textContent = meters >= 1000
+            ? (meters / 1000) + ' km'
+            : meters + ' m';
+    }
+
+    function updateCoordinates(instance, event) {
+
+        if (!instance.coords) return;
+
+        const point = localPoint(instance, event);
+        const latlng = screenToLatLng(instance, point.x, point.y);
+
+        instance.coordsValue.textContent =
+            latlng.lat.toFixed(5) + '° , ' + latlng.lng.toFixed(5) + '°';
+    }
+
+    function render(instance) {
+
+        if (instance.destroyed) return;
+
+        const width = Math.max(1, instance.viewport.clientWidth);
+        const height = Math.max(1, instance.viewport.clientHeight);
+
+        instance.width = width;
+        instance.height = height;
+
+        const zoom = instance.zoom;
+        const tileZoom = clamp(Math.round(zoom), 0, 22);
+        const scale = Math.pow(2, zoom - tileZoom);
+
+        if (instance.tileZoom !== tileZoom ||
+            instance.tileLayerKey !== instance.activeIndex) {
+
+            instance.tilesLayer.innerHTML = '';
+            instance.tiles.clear();
+            instance.tileZoom = tileZoom;
+            instance.tileLayerKey = instance.activeIndex;
+        }
+
+        const center = project(
+            instance.center.lat, instance.center.lng, tileZoom);
+
+        const offsetX =
+            center.x * scale - width / 2 - instance.viewOffset.x;
+        const offsetY =
+            center.y * scale - height / 2 - instance.viewOffset.y;
+
+        instance.tilesLayer.style.transform =
+            'translate3d(' + (-offsetX) + 'px,' + (-offsetY) + 'px,0) ' +
+            'scale(' + scale + ')';
+
+        renderTiles(instance, tileZoom, scale, offsetX, offsetY);
+
+        instance.markers.forEach(function (marker) {
+
+            const point = screenPoint(instance, marker.lat, marker.lng);
+
+            marker.element.style.transform =
+                'translate3d(' + point.x + 'px,' + point.y + 'px,0) ' +
+                'translate(-50%,-100%)';
+
+            marker.element.classList.toggle(
+                'is-outside',
+                point.x < -60 || point.y < -80 ||
+                point.x > width + 60 || point.y > height + 60);
+        });
+
+        renderShapes(instance);
+        positionPopup(instance);
+        updateScale(instance);
+        updateLocateMarker(instance);
+    }
+
+    // --------------------------------------------------------
+    // Init
+    // --------------------------------------------------------
+
+    function initMap(root) {
+
+        if (!root || root._techMap) {
+
+            return root && root._techMapInstance
+                ? root._techMapInstance.api
+                : null;
+        }
+
+        const options = parseMapOptions(root);
+        const controls = options.controls || {};
+        const layers = normalizeLayers(options);
+
+        let minZoom = clamp(number(options.minZoom, 2), 1, 22);
+        let maxZoom = clamp(number(options.maxZoom, 19), 1, 22);
+
+        if (minZoom > maxZoom) {
+
+            const swap = minZoom;
+
+            minZoom = maxZoom;
+            maxZoom = swap;
+        }
+
+        const instance = {
+            element: root,
+            options: options,
+            minZoom: minZoom,
+            maxZoom: maxZoom,
+            center: {
+                lat: clampLat(number(
+                    options.center && options.center.lat, 0)),
+                lng: wrapLng(number(
+                    options.center && options.center.lng, 0))
+            },
+            zoom: clamp(number(options.zoom, 12), minZoom, maxZoom),
+            width: 1,
+            height: 1,
+            viewOffset: { x: 0, y: 0 },
+            layers: layers,
+            activeIndex: 0,
+            markers: new Map(),
+            markerCount: 0,
+            tiles: new Map(),
+            tileZoom: null,
+            tileLayerKey: null,
+            shapes: [],
+            popupMarkerId: null,
+            locate: null,
+            pointers: new Map(),
+            listeners: {},
+            pendingZoomEvent: false,
+            settleTimer: null,
+            animation: null,
+            destroyed: false
+        };
+
+        const selected = layers.findIndex(function (layer) {
+            return layer.selected;
+        });
+
+        instance.activeIndex = selected >= 0 ? selected : 0;
+
+        const initialLayer = layers[instance.activeIndex];
+
+        if (initialLayer && initialLayer.maxZoom) {
+
+            instance.maxZoom = Math.max(
+                instance.minZoom,
+                Math.min(instance.maxZoom, initialLayer.maxZoom));
+            instance.zoom = Math.min(instance.zoom, instance.maxZoom);
+        }
+
+        root.innerHTML = '';
+        root._techMap = true;
+
+        const viewport = document.createElement('div');
+
+        viewport.className = 'tech-map-viewport';
+        viewport.tabIndex = 0;
+        viewport.setAttribute('role', 'region');
+        viewport.setAttribute('aria-roledescription', 'نقشه');
+        viewport.setAttribute(
+            'aria-label',
+            root.getAttribute('aria-label') || 'نقشه تعاملی');
+
+        instance.viewport = viewport;
+
+        const tilesLayer = document.createElement('div');
+
+        tilesLayer.className = 'tech-map-tiles';
+        tilesLayer.setAttribute('aria-hidden', 'true');
+
+        const shapesLayer = document.createElementNS(SVG_NS, 'svg');
+
+        shapesLayer.setAttribute('class', 'tech-map-shapes');
+        shapesLayer.setAttribute('width', '100%');
+        shapesLayer.setAttribute('height', '100%');
+        shapesLayer.setAttribute('aria-hidden', 'true');
+
+        const markersLayer = document.createElement('div');
+
+        markersLayer.className = 'tech-map-markers';
+
+        const popup = document.createElement('div');
+
+        popup.className = 'tech-map-popup';
+        popup.hidden = true;
+        popup.innerHTML =
+            '<button type="button" class="tech-map-popup-close" ' +
+            'aria-label="بستن پنجره">' +
+            '<i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+            '<div class="tech-map-popup-content"></div>';
+
+        const controlsStart = document.createElement('div');
+
+        controlsStart.className =
+            'tech-map-controls tech-map-controls-start';
+
+        const controlsEnd = document.createElement('div');
+
+        controlsEnd.className =
+            'tech-map-controls tech-map-controls-end';
+
+        const attribution = document.createElement('div');
+
+        attribution.className = 'tech-map-attribution';
+        attribution.innerHTML =
+            instance.layers[instance.activeIndex].attribution || '';
+        attribution.hidden =
+            !instance.layers[instance.activeIndex].attribution;
+
+        instance.tilesLayer = tilesLayer;
+        instance.shapesLayer = shapesLayer;
+        instance.markersLayer = markersLayer;
+        instance.popup = popup;
+        instance.popupContent =
+            popup.querySelector('.tech-map-popup-content');
+        instance.attribution = attribution;
+
+        viewport.appendChild(tilesLayer);
+        viewport.appendChild(shapesLayer);
+        viewport.appendChild(markersLayer);
+        viewport.appendChild(popup);
+
+        // Controls
+
+        if (controls.search && options.searchUrl) {
+            buildSearch(instance, controlsStart);
+        }
+
+        if (controls.zoom !== false) {
+
+            const group = createControlGroup();
+            const zoomInButton = createButton('plus-lg', 'بزرگ‌نمایی');
+            const zoomOutButton = createButton('dash-lg', 'کوچک‌نمایی');
+
+            zoomInButton.addEventListener('click', function () {
+                zoomIn(instance);
+            });
+
+            zoomOutButton.addEventListener('click', function () {
+                zoomOut(instance);
+            });
+
+            group.appendChild(zoomInButton);
+            group.appendChild(zoomOutButton);
+            controlsStart.appendChild(group);
+        }
+
+        const endGroup = createControlGroup();
+
+        if (controls.locate !== false && navigator.geolocation) {
+
+            const locateButton = createButton(
+                'crosshair', 'موقعیت من');
+
+            locateButton.addEventListener('click', function () {
+                locate(instance);
+            });
+
+            instance.locateButton = locateButton;
+            endGroup.appendChild(locateButton);
+        }
+
+        if (controls.fullscreen !== false &&
+            (root.requestFullscreen || root.webkitRequestFullscreen)) {
+
+            const fullscreenButton = createButton(
+                'arrows-fullscreen', 'تمام‌صفحه');
+
+            fullscreenButton.addEventListener('click', function () {
+                toggleFullscreen(instance);
+            });
+
+            instance.fullscreenButton = fullscreenButton;
+            endGroup.appendChild(fullscreenButton);
+        }
+
+        if (controls.layers && instance.layers.length > 1) {
+
+            const layersButton = createButton('layers', 'لایه‌های نقشه');
+            const layerList = document.createElement('div');
+
+            layerList.className = 'tech-map-layer-list';
+            layerList.hidden = true;
+
+            instance.layerList = layerList;
+            instance.layerButtons = [];
+
+            instance.layers.forEach(function (layer, index) {
+
+                const item = document.createElement('button');
+
+                item.type = 'button';
+                item.className = 'tech-map-layer-item';
+                item.setAttribute(
+                    'aria-pressed',
+                    index === instance.activeIndex ? 'true' : 'false');
+
+                const check = document.createElement('i');
+
+                check.className = 'bi bi-check-lg tech-map-layer-check';
+                check.setAttribute('aria-hidden', 'true');
+
+                const name = document.createElement('span');
+
+                name.textContent = layer.name;
+
+                item.appendChild(check);
+                item.appendChild(name);
+
+                if (index === instance.activeIndex) {
+                    item.classList.add('is-active');
+                }
+
+                item.addEventListener('click', function (event) {
+
+                    event.stopPropagation();
+
+                    setBaseLayer(instance, index);
+
+                    layerList.hidden = true;
+                });
+
+                instance.layerButtons.push({
+                    index: index,
+                    element: item
+                });
+
+                layerList.appendChild(item);
+            });
+
+            layersButton.addEventListener('click', function (event) {
+
+                event.stopPropagation();
+
+                layerList.hidden = !layerList.hidden;
+            });
+
+            endGroup.appendChild(layersButton);
+            controlsEnd.appendChild(endGroup);
+            controlsEnd.appendChild(layerList);
+        }
+        else {
+
+            controlsEnd.appendChild(endGroup);
+        }
+
+        if (endGroup.childElementCount) {
+            controlsEnd.hidden = false;
+        }
+
+        // Overlay controls
+
+        viewport.appendChild(controlsStart);
+        viewport.appendChild(controlsEnd);
+
+        if (controls.scale !== false) {
+
+            const scale = document.createElement('div');
+
+            scale.className = 'tech-map-scale';
+
+            const bar = document.createElement('div');
+
+            bar.className = 'tech-map-scale-bar';
+
+            const label = document.createElement('span');
+
+            label.className = 'tech-map-scale-label';
+
+            scale.appendChild(bar);
+            scale.appendChild(label);
+            viewport.appendChild(scale);
+
+            instance.scaleBar = bar;
+            instance.scaleLabel = label;
+        }
+
+        if (controls.coordinates) {
+
+            const coords = document.createElement('div');
+
+            coords.className = 'tech-map-coords';
+
+            const coordsValue = document.createElement('span');
+
+            coordsValue.className = 'tech-map-coords-value';
+            coordsValue.setAttribute('dir', 'ltr');
+            coordsValue.textContent = '—';
+
+            coords.appendChild(coordsValue);
+            viewport.appendChild(coords);
+
+            instance.coords = coords;
+            instance.coordsValue = coordsValue;
+        }
+
+        viewport.appendChild(attribution);
+        root.appendChild(viewport);
+
+        // Popup click handling
+
+        popup.addEventListener('click', function (event) {
+            event.stopPropagation();
+        });
+
+        popup.querySelector('.tech-map-popup-close')
+            .addEventListener('click', function (event) {
+
+                event.stopPropagation();
+                closePopup(instance);
+            });
+
+        // Shapes and markers
+
+        buildShapes(instance);
+
+        (options.markers || []).forEach(function (config) {
+
+            addMarkerRecord(instance, {
+                id: config.id,
+                lat: config.lat,
+                lng: config.lng,
+                title: config.title,
+                popup: config.popup,
+                icon: config.icon,
+                tone: config.tone,
+                draggable: config.draggable,
+                open: config.open
+            });
+        });
+
+        // Pointer interactions
+
+        let drag = null;
+        let pinch = null;
+
+        function startPinch() {
+
+            const points = Array.from(instance.pointers.values());
+
+            if (points.length < 2) return;
+
+            const rect = viewport.getBoundingClientRect();
+
+            pinch = {
+                distance: Math.max(
+                    1,
+                    Math.hypot(
+                        points[0].x - points[1].x,
+                        points[0].y - points[1].y)),
+                zoom: instance.zoom,
+                x: (points[0].x + points[1].x) / 2 - rect.left,
+                y: (points[0].y + points[1].y) / 2 - rect.top
+            };
+        }
+
+        function updatePinch() {
+
+            const points = Array.from(instance.pointers.values());
+
+            if (!pinch || points.length < 2) return;
+
+            const distance = Math.max(
+                1,
+                Math.hypot(
+                    points[0].x - points[1].x,
+                    points[0].y - points[1].y));
+
+            const rect = viewport.getBoundingClientRect();
+            const anchorX = (points[0].x + points[1].x) / 2 - rect.left;
+            const anchorY = (points[0].y + points[1].y) / 2 - rect.top;
+            const target = clamp(
+                pinch.zoom + Math.log2(distance / pinch.distance),
+                instance.minZoom,
+                instance.maxZoom);
+
+            zoomAround(instance, anchorX, anchorY, target);
+            markViewChanged(instance, true, 200);
+        }
+
+        viewport.addEventListener('pointerdown', function (event) {
+
+            if (event.pointerType === 'mouse' && event.button !== 0) {
+                return;
+            }
+
+            if (event.target.closest &&
+                event.target.closest(
+                    '.tech-map-controls, .tech-map-popup, ' +
+                    '.tech-map-marker, .tech-map-attribution')) {
+
+                return;
+            }
+
+            try {
+                viewport.focus({ preventScroll: true });
+            }
+            catch {
+                // Older browsers ignore focus options.
+            }
+
+            hideSearchResults(instance);
+
+            if (instance.layerList) {
+                instance.layerList.hidden = true;
+            }
+
+            instance.pointers.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY
+            });
+
+            try {
+                viewport.setPointerCapture(event.pointerId);
+            }
+            catch {
+                // Pointer capture is a progressive enhancement.
+            }
+
+            if (instance.pointers.size === 1) {
+
+                if (instance.options.dragging === false) return;
+
+                cancelAnimation(instance);
+
+                drag = {
+                    pointerId: event.pointerId,
+                    x: event.clientX,
+                    y: event.clientY,
+                    moved: false
+                };
+
+                viewport.classList.add('is-dragging');
+            }
+            else if (instance.pointers.size === 2) {
+
+                if (drag && drag.moved) {
+                    commitViewOffset(instance);
+                }
+
+                drag = null;
+                viewport.classList.remove('is-dragging');
+
+                startPinch();
+            }
+        });
+
+        viewport.addEventListener('pointermove', function (event) {
+
+            updateCoordinates(instance, event);
+
+            if (!instance.pointers.has(event.pointerId)) return;
+
+            instance.pointers.set(event.pointerId, {
+                x: event.clientX,
+                y: event.clientY
+            });
+
+            if (pinch) {
+
+                updatePinch();
+
+                return;
+            }
+
+            if (!drag || drag.pointerId !== event.pointerId) return;
+
+            const dx = event.clientX - drag.x;
+            const dy = event.clientY - drag.y;
+
+            if (!drag.moved &&
+                Math.abs(dx) + Math.abs(dy) > 3) {
+
+                drag.moved = true;
+                closePopup(instance);
+            }
+
+            if (!drag.moved) return;
+
+            instance.viewOffset.x += dx;
+            instance.viewOffset.y += dy;
+            drag.x = event.clientX;
+            drag.y = event.clientY;
+
+            render(instance);
+        });
+
+        function endPointer(event) {
+
+            if (!instance.pointers.has(event.pointerId)) return;
+
+            instance.pointers.delete(event.pointerId);
+
+            if (pinch) {
+
+                if (instance.pointers.size < 2) {
+
+                    pinch = null;
+                    settleNow(instance);
+                }
+
+                return;
+            }
+
+            if (!drag || drag.pointerId !== event.pointerId) return;
+
+            const moved = drag.moved;
+            const point = localPoint(instance, event);
+
+            drag = null;
+            viewport.classList.remove('is-dragging');
+
+            if (moved) {
+
+                commitViewOffset(instance);
+                settleNow(instance);
+
+                return;
+            }
+
+            const latlng = screenToLatLng(instance, point.x, point.y);
+
+            closePopup(instance);
+
+            emit(instance, 'click', {
+                lat: latlng.lat,
+                lng: latlng.lng,
+                point: point
+            });
+        }
+
+        viewport.addEventListener('pointerup', endPointer);
+
+        viewport.addEventListener('pointercancel', function (event) {
+
+            instance.pointers.delete(event.pointerId);
+
+            if (pinch && instance.pointers.size < 2) {
+                pinch = null;
+            }
+
+            if (drag && drag.pointerId === event.pointerId) {
+
+                drag = null;
+                viewport.classList.remove('is-dragging');
+
+                commitViewOffset(instance);
+            }
+        });
+
+        viewport.addEventListener('pointerleave', function () {
+
+            if (instance.coordsValue) {
+                instance.coordsValue.textContent = '—';
+            }
+        });
+
+        viewport.addEventListener('wheel', function (event) {
+
+            if (instance.options.scrollWheelZoom === false) return;
+
+            if (event.target.closest &&
+                event.target.closest('.tech-map-controls, .tech-map-popup')) {
+
+                return;
+            }
+
+            event.preventDefault();
+
+            const point = localPoint(instance, event);
+            const delta = event.deltaMode === 1
+                ? event.deltaY * 16
+                : event.deltaY;
+            const factor = Math.exp(-delta * 0.0016);
+
+            zoomAround(
+                instance,
+                point.x,
+                point.y,
+                clamp(
+                    instance.zoom + Math.log2(factor),
+                    instance.minZoom,
+                    instance.maxZoom));
+
+            markViewChanged(instance, true, 220);
+        }, { passive: false });
+
+        viewport.addEventListener('dblclick', function (event) {
+
+            if (instance.options.doubleClickZoom === false) return;
+
+            if (event.target.closest &&
+                event.target.closest(
+                    '.tech-map-controls, .tech-map-marker, ' +
+                    '.tech-map-popup')) {
+
+                return;
+            }
+
+            event.preventDefault();
+
+            const point = localPoint(instance, event);
+
+            zoomAroundAnimated(
+                instance,
+                point.x,
+                point.y,
+                Math.min(
+                    instance.maxZoom,
+                    Math.floor(instance.zoom) + 1));
+        });
+
+        viewport.addEventListener('keydown', function (event) {
+
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+            const key = event.key;
+
+            if (key === 'Escape') {
+
+                closePopup(instance);
+
+                if (instance.layerList) {
+                    instance.layerList.hidden = true;
+                }
+
+                hideSearchResults(instance);
+
+                return;
+            }
+
+            if (instance.options.keyboard === false) return;
+
+            if (key === '+' || key === '=') {
+
+                event.preventDefault();
+                zoomIn(instance);
+
+                return;
+            }
+
+            if (key === '-' || key === '_') {
+
+                event.preventDefault();
+                zoomOut(instance);
+
+                return;
+            }
+
+            let dx = 0;
+            let dy = 0;
+
+            if (key === 'ArrowUp') dy = -100;
+            else if (key === 'ArrowDown') dy = 100;
+            else if (key === 'ArrowLeft') dx = -100;
+            else if (key === 'ArrowRight') dx = 100;
+            else return;
+
+            event.preventDefault();
+
+            panByPixels(instance, dx, dy, true);
+        });
+
+        // Fullscreen
+
+        instance.onFullscreenChange = function () {
+
+            const active = document.fullscreenElement === root ||
+                document.webkitFullscreenElement === root;
+
+            if (instance.fullscreenButton) {
+
+                const icon = instance.fullscreenButton
+                    .querySelector('i');
+
+                if (icon) {
+                    icon.className = 'bi bi-' + (active
+                        ? 'fullscreen-exit'
+                        : 'arrows-fullscreen');
+                }
+
+                instance.fullscreenButton.setAttribute(
+                    'aria-label',
+                    active ? 'خروج از تمام‌صفحه' : 'تمام‌صفحه');
+            }
+
+            render(instance);
+        };
+
+        document.addEventListener(
+            'fullscreenchange', instance.onFullscreenChange);
+
+        document.addEventListener(
+            'webkitfullscreenchange', instance.onFullscreenChange);
+
+        // API
+
+        const api = {
+            element: root,
+            getCenter: function () {
+
+                return {
+                    lat: instance.center.lat,
+                    lng: instance.center.lng
+                };
+            },
+            getZoom: function () {
+                return instance.zoom;
+            },
+            getBounds: function () {
+                return viewState(instance).bounds;
+            },
+            setView: function (latlng, zoom, animate) {
+
+                applyView(
+                    instance,
+                    latlng,
+                    zoom === undefined ? instance.zoom : zoom,
+                    animate);
+
+                return api;
+            },
+            panTo: function (latlng, animate) {
+
+                applyView(instance, latlng, instance.zoom, animate);
+
+                return api;
+            },
+            setZoom: function (zoom) {
+
+                applyView(instance, instance.center, zoom, false);
+
+                return api;
+            },
+            zoomIn: function () {
+
+                zoomIn(instance);
+
+                return api;
+            },
+            zoomOut: function () {
+
+                zoomOut(instance);
+
+                return api;
+            },
+            panBy: function (dx, dy) {
+
+                panByPixels(
+                    instance,
+                    number(dx, 0),
+                    number(dy, 0),
+                    false);
+
+                return api;
+            },
+            addMarker: function (config) {
+
+                const handle = addMarkerRecord(instance, config);
+
+                render(instance);
+
+                if (config && config.open) {
+                    openPopup(instance, handle.id);
+                }
+
+                return handle;
+            },
+            removeMarker: function (id) {
+
+                return removeMarkerRecord(instance, id);
+            },
+            getMarkers: function () {
+
+                return Array.from(instance.markers.values())
+                    .map(function (marker) {
+                        return marker.handle;
+                    });
+            },
+            setBaseLayer: function (value) {
+
+                return setBaseLayer(instance, value);
+            },
+            getBaseLayer: function () {
+
+                return instance.layers[instance.activeIndex];
+            },
+            locate: function () {
+                return locate(instance);
+            },
+            fitBounds: function (points, fitOptions) {
+
+                fitBounds(instance, points, fitOptions);
+
+                return api;
+            },
+            invalidateSize: function () {
+
+                render(instance);
+
+                return api;
+            },
+            openPopup: function (id) {
+
+                openPopup(instance, id);
+
+                return api;
+            },
+            closePopup: function () {
+
+                closePopup(instance);
+
+                return api;
+            },
+            on: function (name, handler) {
+
+                addListener(instance, name, handler);
+
+                return api;
+            },
+            off: function (name, handler) {
+
+                removeListener(instance, name, handler);
+
+                return api;
+            },
+            destroy: function () {
+                instance.destroy();
+            }
+        };
+
+        instance.api = api;
+
+        instance.destroy = function () {
+
+            instance.destroyed = true;
+
+            cancelAnimation(instance);
+            clearTimeout(instance.settleTimer);
+
+            if (instance.observer) instance.observer.disconnect();
+
+            if (instance.onWindowResize) {
+
+                window.removeEventListener(
+                    'resize', instance.onWindowResize);
+            }
+
+            document.removeEventListener(
+                'fullscreenchange', instance.onFullscreenChange);
+
+            document.removeEventListener(
+                'webkitfullscreenchange', instance.onFullscreenChange);
+
+            if (instance.searchController) {
+                instance.searchController.abort();
+            }
+
+            if (root.id) {
+                Tech.Map.instances.delete(root.id);
+            }
+
+            root._techMap = false;
+            root._techMapInstance = null;
+            root.innerHTML = '';
+        };
+
+        // Observers
+
+        if (window.ResizeObserver) {
+
+            instance.observer = new ResizeObserver(function () {
+                render(instance);
+            });
+
+            instance.observer.observe(root);
+        }
+
+        instance.onWindowResize = function () {
+            render(instance);
+        };
+
+        window.addEventListener('resize', instance.onWindowResize);
+
+        root._techMapInstance = instance;
+
+        if (root.id) {
+            Tech.Map.instances.set(root.id, instance);
+        }
+
+        render(instance);
+
+        instance.markers.forEach(function (marker) {
+
+            if (marker.initialOpen) {
+                openPopup(instance, marker.id);
+            }
+        });
+
+        return instance.api;
+    }
+
+    function normalizeLayers(options) {
+
+        const source = Array.isArray(options.layers) ? options.layers : [];
+        const layers = [];
+
+        source.forEach(function (layer) {
+
+            if (!layer || !layer.url) return;
+
+            layers.push({
+                name: layer.name || 'لایه',
+                url: layer.url,
+                attribution: layer.attribution || '',
+                selected: !!layer.selected,
+                maxZoom: number(layer.maxZoom, 0) || null,
+                subdomains: Array.isArray(layer.subdomains)
+                    ? layer.subdomains
+                    : []
+            });
+        });
+
+        if (!layers.length) {
+
+            layers.push({
+                name: 'نقشه پایه',
+                url: options.tileUrl ||
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: options.attribution || '',
+                selected: true,
+                maxZoom: null,
+                subdomains: Array.isArray(options.subdomains)
+                    ? options.subdomains
+                    : []
+            });
+        }
+
+        return layers;
+    }
+
+    function buildSearch(instance, controlsStart) {
+
+        const wrap = document.createElement('div');
+
+        wrap.className = 'tech-map-search-wrap';
+
+        const form = document.createElement('form');
+
+        form.className = 'tech-map-search';
+        form.setAttribute('role', 'search');
+
+        const icon = document.createElement('i');
+
+        icon.className = 'bi bi-search tech-map-search-icon';
+        icon.setAttribute('aria-hidden', 'true');
+
+        const input = document.createElement('input');
+
+        input.type = 'search';
+        input.className = 'tech-map-search-input';
+        input.placeholder = instance.options.searchPlaceholder ||
+            'جستجوی مکان…';
+        input.setAttribute('aria-label', 'جستجوی مکان');
+        input.autocomplete = 'off';
+
+        const submit = createButton(
+            'arrow-return-left', 'جستجو', 'tech-map-search-submit');
+
+        submit.type = 'submit';
+
+        form.appendChild(icon);
+        form.appendChild(input);
+        form.appendChild(submit);
+
+        const results = document.createElement('div');
+
+        results.className = 'tech-map-search-results';
+        results.hidden = true;
+
+        form.addEventListener('submit', function (event) {
+
+            event.preventDefault();
+
+            runSearch(instance, input.value.trim());
+        });
+
+        input.addEventListener('keydown', function (event) {
+
+            if (event.key === 'Escape') {
+
+                hideSearchResults(instance);
+                input.blur();
+            }
+        });
+
+        wrap.appendChild(form);
+        wrap.appendChild(results);
+        controlsStart.appendChild(wrap);
+
+        instance.searchForm = form;
+        instance.searchInput = input;
+        instance.searchResults = results;
+    }
+
+    function toggleFullscreen(instance) {
+
+        const root = instance.element;
+        const active = document.fullscreenElement ||
+            document.webkitFullscreenElement;
+
+        if (active === root) {
+
+            const exit = document.exitFullscreen ||
+                document.webkitExitFullscreen;
+
+            if (exit) exit.call(document);
+
+            return;
+        }
+
+        const request = root.requestFullscreen ||
+            root.webkitRequestFullscreen;
+
+        if (!request) return;
+
+        const result = request.call(root);
+
+        if (result && typeof result.catch === 'function') {
+
+            result.catch(function () {
+                Tech.notify(
+                    'ورود به حالت تمام‌صفحه ممکن نیست.',
+                    { type: 'warning' });
+            });
+        }
+    }
+
+    Tech.Map.get = function (target) {
+
+        const element = target && target.nodeType === 1
+            ? target
+            : document.getElementById(target);
+
+        return element && element._techMapInstance
+            ? element._techMapInstance.api
+            : null;
+    };
+
+    Tech.register('map', initMap);
+})();
+
+
+// ------------------------------------------------------------
 // Boot
 // ------------------------------------------------------------
 

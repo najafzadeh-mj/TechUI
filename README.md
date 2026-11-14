@@ -134,8 +134,8 @@ the library is a GET endpoint called with `?type=image|file`.
 Grid, DropDownList, TextBox, TextArea, NumericTextBox, MaskedTextBox, Editor,
 CheckBox, RadioButton, DatePicker, DateRangePicker, TimePicker, MultiSelect /
 Tag Input, Tabs, Accordion, TreeView, DropDownTree, FileUpload, Captcha,
-Wizard / Stepper, Timeline, Breadcrumb, Chat, Chart (23 types), Spinner, Toast
-and Dialog. The
+Wizard / Stepper, Timeline, Breadcrumb, Chat, Chart (23 types), Map
+(OpenStreetMap), Spinner, Toast and Dialog. The
 standalone Chat panel works as an AI assistant or a human support inbox, and the
 Grid also offers an optional assistant chat panel backed by your own endpoint —
 TechUI ships no AI dependency; see
@@ -149,7 +149,8 @@ Full fluent API and JavaScript API reference:
 
 A runnable sample for every component lives in `src/samples/TechUI.SampleMvc`.
 A complete Persian admin panel — SQLite + EF Core, dashboard, server-side grids,
-validated CRUD, reports and settings — lives in `src/samples/TechUI.SampleAdmin`.
+validated CRUD, reports, a customer map and settings — lives in
+`src/samples/TechUI.SampleAdmin`.
 
 Build and run from the repository root:
 

@@ -50,6 +50,19 @@ public sealed class AdminController : Controller
         nameof(Order.Total)
     };
 
+    private static readonly Dictionary<string, (double Lat, double Lng)>
+        CityCoordinates = new()
+        {
+            ["تهران"] = (35.6892, 51.3890),
+            ["مشهد"] = (36.2972, 59.6067),
+            ["اصفهان"] = (32.6546, 51.6680),
+            ["شیراز"] = (29.5918, 52.5837),
+            ["تبریز"] = (38.0800, 46.2919),
+            ["کرج"] = (35.8400, 50.9391),
+            ["اهواز"] = (31.3183, 48.6706),
+            ["قم"] = (34.6416, 50.8746)
+        };
+
     private readonly AdminDbContext _db;
     private readonly SettingsService _settings;
 
@@ -774,6 +787,73 @@ public sealed class AdminController : Controller
             .Where(o => o.OrderDate >= start && o.OrderDate < end.AddDays(1));
 
         return Json(await query.ToTechGridResultAsync(request, OrderFields));
+    }
+
+    // ---------------------------------------------------------
+    // Customer map
+    // ---------------------------------------------------------
+
+    [HttpGet]
+    public async Task<IActionResult> Map()
+    {
+        ViewData["Title"] = "نقشه مشتریان";
+        ViewData["ActiveNav"] = "map";
+        SetBreadcrumb(
+            ("پنل", "Index"),
+            ("نقشه مشتریان", null));
+
+        var customers = await _db.Customers
+            .AsNoTracking()
+            .Select(c => new
+            {
+                c.City,
+                c.IsActive,
+                c.Credit
+            })
+            .ToListAsync();
+
+        var orders = await _db.Orders
+            .AsNoTracking()
+            .Where(o => o.Status != OrderStatus.Canceled)
+            .Select(o => new
+            {
+                City = o.Customer!.City,
+                o.Total
+            })
+            .ToListAsync();
+
+        var cities = new List<CityMapPoint>();
+
+        foreach (var city in CityCoordinates)
+        {
+            var cityCustomers = customers
+                .Where(customer => customer.City == city.Key)
+                .ToList();
+
+            var cityOrders = orders
+                .Where(order => order.City == city.Key)
+                .ToList();
+
+            cities.Add(new CityMapPoint(
+                city.Key,
+                city.Value.Lat,
+                city.Value.Lng,
+                cityCustomers.Count,
+                cityCustomers.Count(customer => customer.IsActive),
+                cityCustomers.Sum(customer => customer.Credit),
+                cityOrders.Count,
+                cityOrders.Sum(order => order.Total)));
+        }
+
+        var model = new MapViewModel
+        {
+            Cities = cities
+                .OrderByDescending(city => city.Revenue)
+                .ThenByDescending(city => city.Customers)
+                .ToList()
+        };
+
+        return View(model);
     }
 
     // ---------------------------------------------------------

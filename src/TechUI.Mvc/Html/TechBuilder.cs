@@ -15,6 +15,7 @@ using TechUI.Mvc.FileUpload;
 using TechUI.Mvc.Grid;
 using TechUI.Mvc.Inputs;
 using TechUI.Mvc.Layout;
+using TechUI.Mvc.Map;
 using TechUI.Mvc.MultiSelect;
 using TechUI.Mvc.Timeline;
 using TechUI.Mvc.TreeView;
@@ -44,6 +45,11 @@ namespace TechUI.Mvc.Html
         public ChartBuilder Chart(string? id = null)
         {
             return new ChartBuilder(id);
+        }
+
+        public MapBuilder Map(string? id = null)
+        {
+            return new MapBuilder(id);
         }
 
         public DropdownListBuilder DropDownList(string name)

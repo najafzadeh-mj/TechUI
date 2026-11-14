@@ -26,6 +26,7 @@
 - [Breadcrumb](#breadcrumb)
 - [Chat](#chat)
 - [Chart](#chart)
+- [Map](#map)
 - [Spinner](#spinner)
 - [Toast / Notification](#toast--notification)
 - [Dialog / Confirm / Alert](#dialog--confirm--alert)
@@ -1923,6 +1924,222 @@ Tech.Chart.update('salesChart', { tooltip: { show: false } });
 اگر رنگ یک خانه با رنگ اصلی قالب یکی شود (مثلاً زمردی با `--tech-chart-2`)،
 موتور نمودار آن را خودکار با یک رنگ متمایز جایگزین می‌کند تا سری‌ها قابل
 تفکیک بمانند. برای رنگ‌های ثابت از `Colors` یا `Color` روی سری استفاده کنید.
+
+---
+
+## Map
+
+نقشه‌ی تعاملی روی کاشی‌های OpenStreetMap (slippy map) بدون هیچ وابستگی
+جاوااسکریپتی؛ موتور نقشه، نشانگرها، پاپ‌آپ‌ها، شکل‌های برداری، جستجو،
+موقعیت‌یابی و کنترل‌ها همه در `techui.js` هستند. کاشی‌های تصویری از اینترنت
+بارگذاری می‌شوند، بنابراین این کامپوننت بدون اتصال شبکه فقط پوسته‌ی خالی نشان
+می‌دهد.
+
+```razor
+@using TechUI.Mvc.Map
+
+@(Html.Tech().Map("tehranMap")
+    .Height(480)
+    .Center(35.71, 51.39)
+    .Zoom(12)
+    .MinZoom(4)
+    .MaxZoom(19)
+    .Marker(35.6997, 51.3380, marker => marker
+        .Title("میدان آزادی")
+        .Popup("<b>میدان آزادی</b><br />نماد شهر تهران")
+        .Icon("building")
+        .Tone(MapTones.Primary)
+        .Open())
+    .Marker(35.7522, 51.3756, "برج میلاد", "بلندترین برج ایران",
+        "broadcast", MapTones.Info)
+    .Polyline(new[] { (35.700, 51.410), (35.720, 51.400) },
+        color: "#2563eb", weight: 5)
+    .Polygon(new[] { (35.70, 51.38), (35.71, 51.38), (35.71, 51.39) },
+        fillOpacity: 0.18)
+    .Circle(35.7522, 51.3756, 1200, fillOpacity: 0.10)
+    .Events(events => events
+        .MarkerClick("onMapMarker")
+        .MoveEnd("onMapMove")))
+```
+
+اگر شناسه ندهید، شناسه‌ای با الگوی `tech-map-xxxxxxxx` ساخته می‌شود. مرکز
+پیش‌فرض تهران (`35.6892, 51.3890`)، زوم `12`، حداقل `2`، حداکثر `19` و ارتفاع
+`420px` است. ارتفاع بین ۱۶۰ و ۲۰۰۰ پیکسل و زوم بین ۱ و ۲۲ محدود می‌شود.
+
+### گزینه‌های بیلدر
+
+| متد | توضیح |
+| --- | --- |
+| `Center(lat, lng)` | مرکز اولیه؛ عرض جغرافیایی به بازه‌ی وب‌مرکاتور و طول جغرافیایی به `-180..180` نرمال می‌شود |
+| `Zoom(int)` / `MinZoom(int)` / `MaxZoom(int)` | زوم اولیه و محدوده‌ی زوم |
+| `Height(int)` | ارتفاع ظرف به پیکسل |
+| `TileUrl(url)` | آدرس کاشی پیش‌فرض؛ جای‌نگهدارهای `{z}`، `{x}`، `{y}`، `{s}` و `{-y}` پشتیبانی می‌شوند |
+| `Attribution(html)` | متن انتساب گوشه‌ی نقشه |
+| `Subdomains(params string[])` | زیردامنه‌ها برای جای‌نگهدار `{s}` |
+| `Source(source, attribution?)` | انتخاب منبع کاشی از `MapSources` یا هر URL دارای `{z}` |
+| `Layer(name, url, attribution?, selected?, maxZoom?)` | افزودن لایه‌ی پایه؛ اولین لایه به‌طور خودکار فعال می‌شود |
+| `Layer(MapSource, name?, selected?)` | افزودن یکی از منابع آماده به‌عنوان لایه |
+| `Marker(...)` | افزودن نشانگر (دو overload: ساده یا با `Action<MapMarkerBuilder>`) |
+| `Polyline(points, color?, weight?, opacity?)` | خط شکسته |
+| `Polygon(points, color?, weight?, opacity?, fillOpacity?)` | چندضلعی |
+| `Circle(lat, lng, radiusMeters, color?, fillOpacity?)` | دایره با شعاع واقعی به متر |
+| `Search(url?, placeholder?)` | فعال‌کردن جستجو (پیش‌فرض Nominatim) |
+| `ZoomControl` / `ScaleControl` / `FullscreenControl` / `LocateControl` / `CoordinatesControl` / `LayerControl` / `SearchControl` | نمایش یا پنهان‌کردن هر کنترل (`bool show = true`) |
+| `ScrollWheelZoom` / `DoubleClickZoom` / `Dragging` / `Keyboard` | فعال یا غیرفعال‌کردن تعامل (`bool enabled = true`) |
+| `AriaLabel(string)` | برچسب دسترس‌پذیری ظرف نقشه |
+| `CssClass(string)` / `Attribute(name, value)` / `Attributes(...)` | سفارشی‌سازی ریشه |
+
+پیش‌فرض کنترل‌ها: زوم، مقیاس، تمام‌صفحه و موقعیت‌یابی روشن؛ مختصات خاموش؛
+کنترل لایه فقط وقتی بیش از یک `Layer` ثبت شده باشد و کنترل جستجو فقط بعد از
+فراخوانی `Search(...)` ظاهر می‌شود.
+
+### منابع نقشه
+
+کلاس `MapSources` چند منبع آماده دارد که URL، متن انتساب، زیردامنه‌ها و سقف
+زوم را یک‌جا مشخص می‌کند:
+
+| ثابت | کلید | منبع | حداکثر زوم |
+| --- | --- | --- | --- |
+| `MapSources.OpenStreetMap` | `osm` | کاشی استاندارد OSM | ۱۹ |
+| `MapSources.CartoLight` | `light` | CARTO Voyager (روشن) | ۲۰ |
+| `MapSources.CartoDark` | `dark` | CARTO Dark Matter | ۲۰ |
+| `MapSources.OpenTopoMap` | `topo` | OpenTopoMap | ۱۷ |
+| `MapSources.EsriSatellite` | `satellite` | تصاویر ماهواره‌ای Esri | ۱۹ |
+
+```razor
+// یک منبع برای کل نقشه
+@(Html.Tech().Map("darkMap")
+    .Source(MapSources.CartoDark)
+    .Height(360))
+
+// یا چند منبع به‌عنوان لایه‌ی قابل تعویض
+@(Html.Tech().Map("layersMap")
+    .Layer(MapSources.OpenStreetMap, selected: true)
+    .Layer(MapSources.CartoLight)
+    .Layer(MapSources.EsriSatellite))
+```
+
+`Source(string)` هم کلید/نام منبع را می‌پذیرد (`"satellite"`، `"توپوگرافی"`) و
+هم هر URL کاشی دارای `{z}` را. `Source` سقف زوم منبع را اعمال می‌کند (برای
+توپوگرافی ۱۷)؛ `MaxZoom(...)` بعد از آن می‌تواند سقف را تغییر دهد. در
+`Layer(MapSource)` هم سقف همان لایه ذخیره می‌شود و هنگام فعال‌شدن لایه، زوم در
+صورت نیاز تا سقف پایین کشیده می‌شود.
+
+سیاست استفاده‌ی هر سرویس را پیش از ترافیک تولیدی بررسی کنید. برای سرور کاشی
+اختصاصی از `Source(string)` یا `TileUrl(...)` استفاده کنید.
+
+### نشانگرها
+
+```razor
+.Marker(35.6997, 51.3380, marker => marker
+    .Id("azadi")
+    .Title("میدان آزادی")
+    .Popup("<b>میدان آزادی</b>")
+    .Icon("geo-alt-fill")
+    .Tone(MapTones.Danger)
+    .Draggable()
+    .Open())
+```
+
+| متد | توضیح |
+| --- | --- |
+| `Id(string)` | شناسه‌ی پایدار برای استفاده در API کلاینت |
+| `Title(string)` | متن `title` و `aria-label` |
+| `Popup(html)` | محتوای HTML پاپ‌آپ |
+| `Icon(string)` | آیکون Bootstrap Icons بدون پیشوند `bi-` (پیش‌فرض `geo-alt-fill`) |
+| `Tone(string)` | رنگ نشانگر از `MapTones`: `Primary`, `Success`, `Info`, `Warning`, `Danger`, `Neutral` |
+| `Draggable(bool = true)` | جابه‌جایی نشانگر با درگ |
+| `Open(bool = true)` | باز شدن پاپ‌آپ در بارگذاری اولیه |
+
+محتوای `Popup` به‌صورت HTML درج می‌شود و باید از منبع مورد اعتماد بیاید؛ متن
+نتایج جستجوی بیرونی قبل از نمایش escape می‌شود.
+
+### رویدادها
+
+متدهای `MapEventBuilder` نام یک تابع سراسری (`window[name]`) را می‌گیرند و تابع
+با `(payload, api)` صدا زده می‌شود:
+
+| متد | نام رویداد | payload |
+| --- | --- | --- |
+| `Click(handler)` | `click` | `{ lat, lng, point: { x, y } }` |
+| `MoveEnd(handler)` | `moveEnd` | `{ center: { lat, lng }, zoom, bounds: { north, west, south, east } }` |
+| `ZoomEnd(handler)` | `zoomEnd` | مثل `moveEnd` |
+| `MarkerClick(handler)` | `markerClick` | `{ id, lat, lng, title }` |
+| `MarkerDragEnd(handler)` | `markerDragEnd` | `{ id, lat, lng }` |
+| `Locate(handler)` | `locate` | `{ lat, lng, accuracy }` یا `{ error: "unavailable" }` |
+| `Search(handler)` | `search` | `{ query, results: [{ name, displayName, lat, lng }] }` |
+
+رویدادهای `moveEnd`/`zoomEnd` پس از پایان حرکت یا زوم (با تأخیر کوتاه برای
+جمع‌شدن حرکت پیوسته) و یک‌بار در پایان انیمیشن برنامه‌ای ارسال می‌شوند.
+
+### API کلاینت
+
+```js
+const map = Tech.Map.get('tehranMap');
+
+map.getCenter();                       // { lat, lng }
+map.getZoom();
+map.getBounds();                       // { north, west, south, east }
+map.setView({ lat: 35.7, lng: 51.4 }, 14, true);
+map.panTo({ lat: 35.7, lng: 51.4 }, true);
+map.setZoom(13);
+map.zoomIn();  map.zoomOut();
+map.panBy(120, 0);                     // پیکسل
+map.fitBounds([[25.05, 44.03], [39.78, 63.33]], { maxZoom: 6 });
+
+const marker = map.addMarker({
+    lat: 35.7, lng: 51.4, title: 'نقطه', popup: 'توضیح',
+    icon: 'pin-angle', tone: 'success', draggable: true
+});
+
+marker.setLatLng(35.71, 51.41);
+marker.getLatLng();
+marker.setIcon('flag');
+marker.openPopup();  marker.closePopup();
+marker.remove();
+
+map.removeMarker('marker-1');
+map.getMarkers();
+map.setBaseLayer('توپوگرافی');          // یا index یا URL
+map.getBaseLayer();
+map.locate();                          // Promise<{ lat, lng, accuracy } | null>
+map.openPopup('marker-1');
+map.closePopup();
+map.invalidateSize();                  // بعد از تغییر اندازه یا نمایش ظرف مخفی
+map.on('zoomEnd', handler);
+map.off('zoomEnd', handler);
+map.destroy();
+```
+
+`Tech.Map.get` هم شناسه و هم خود المان را می‌پذیرد و شیء API را برمی‌گرداند.
+`fitBounds` آرایه‌ای از `[lat, lng]` یا `{ lat, lng }` می‌پذیرد و برای یک نقطه
+زوم ۱۵ (یا `maxZoom`) را انتخاب می‌کند.
+
+### نقشه، RTL و تم تاریک
+
+موقعیت کنترل‌ها با ویژگی‌های منطقی CSS (`inset-inline-start/end`) تنظیم
+می‌شود، پس در صفحه‌ی راست‌به‌چپ گروه زوم سمت راست و موقعیت‌یابی/تمام‌صفحه سمت
+چپ قرار می‌گیرند؛ مقیاس و مقادیر مختصات با `direction: ltr` ایزوله می‌شوند تا
+اعداد به‌هم نریزند. در تم تاریک کاشی‌ها با فیلتر تیره‌سازی نمایش داده می‌شوند و
+کنترل‌ها و پاپ‌آپ از توکن‌های سطح استفاده می‌کنند، بنابراین قالب‌های رنگ هم روی
+آن‌ها اثر می‌گذارند.
+
+### نکته‌ها
+
+- پیاده‌سازی مستقل است و به Leaflet/MapLibre وابسته نیست؛ فقط CSS و JS خود
+  TechUI لازم است.
+- کاشی پیش‌فرض `tile.openstreetmap.org` برای توسعه و ترافیک کم است. برای
+  تولید، سرور کاشی یا سرویس تجاری خودتان را در `TileUrl`/`Layer` بگذارید و
+  انتساب متناسب را در `Attribution` تنظیم کنید.
+- جستجو با `format=jsonv2&limit=6&accept-language=fa` به `SearchUrl` ارسال
+  می‌شود و نتایج در فهرست زیر کادر جستجو نمایش داده می‌شوند. برای Nominatim
+  سیاست استفاده‌ی منصفانه (بدون درخواست انبوه) را رعایت کنید.
+- ناوبری با صفحه‌کلید: `+`/`-` زوم، کلیدهای جهت‌دار جابه‌جایی و `Escape` بستن
+  پاپ‌آپ/فهرست لایه/نتایج جستجو. با `Keyboard(false)` غیرفعال می‌شود.
+- درگ با ماوس/لمس، پینچ دو انگشتی، زوم با چرخ ماوس (با لنگر روی موقعیت
+  نشانگر ماوس) و دوبار کلیک پشتیبانی می‌شوند.
+- در تم تاریک و حالت `prefers-reduced-motion` انیمیشن‌های نقشه سبک‌تر یا حذف
+  می‌شوند.
 
 ---
 

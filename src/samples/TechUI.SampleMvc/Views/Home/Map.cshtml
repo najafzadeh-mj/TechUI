@@ -1,0 +1,304 @@
+@using TechUI.Mvc.Map
+@{
+    ViewData["Title"] = "Map";
+}
+
+<h1>نقشه تعاملی</h1>
+<p class="text-muted">
+    نقشه با موتور سبک و بدون وابستگی خارجی TechUI روی کاشی‌های
+    OpenStreetMap رندر می‌شود: کشیدن، بزرگ‌نمایی با چرخ و دکمه، نشانگر با
+    پنجره، چندضلعی، مسیر، دایره، جستجوی مکان، موقعیت من، مقیاس، مختصات و
+    حالت تمام‌صفحه.
+</p>
+
+<div class="row g-4" dir="rtl" lang="fa">
+
+    <div class="col-12 col-xl-8">
+        @(Html.Tech().Map("mapTehran")
+            .Height(480)
+            .Center(35.7100, 51.3900)
+            .Zoom(12)
+            .MinZoom(4)
+            .MaxZoom(19)
+            .AriaLabel("نقشه تهران با نشانگرها، مسیر و محدوده")
+            .Marker(35.6997, 51.3381, marker => marker
+                .Id("azadi")
+                .Title("برج آزادی")
+                .Popup("<div class=\"tech-map-popup-title\">برج آزادی</div>"
+                    + "<div class=\"tech-map-popup-text\">نماد شهر تهران؛"
+                    + " میدان آزادی، ابتدای بزرگراه شهید همت.</div>")
+                .Icon("building")
+                .Tone(MapTones.Primary)
+                .Open())
+            .Marker(35.7448, 51.3752, marker => marker
+                .Id("milad")
+                .Title("برج میلاد")
+                .Popup("<div class=\"tech-map-popup-title\">برج میلاد</div>"
+                    + "<div class=\"tech-map-popup-text\">ششمین برج بلند"
+                    + " مخابراتی جهان در شمال غرب تهران.</div>")
+                .Icon("broadcast")
+                .Tone(MapTones.Info))
+            .Marker(35.6797, 51.4205, marker => marker
+                .Id("golestan")
+                .Title("کاخ گلستان")
+                .Popup("<div class=\"tech-map-popup-title\">کاخ گلستان</div>"
+                    + "<div class=\"tech-map-popup-text\">مجموعه‌ای از"
+                    + " بناهای تاریخی دوره قاجار در قلب تهران.</div>")
+                .Icon("bank")
+                .Tone(MapTones.Warning))
+            .Marker(35.8050, 51.4330, marker => marker
+                .Id("tajrish")
+                .Title("تجریش")
+                .Popup("<div class=\"tech-map-popup-title\">تجریش</div>"
+                    + "<div class=\"tech-map-popup-text\">بازار سنتی و"
+                    + " نقطه آغاز خیابان ولیعصر.</div>")
+                .Icon("shop")
+                .Tone(MapTones.Success))
+            .Polyline(new[]
+            {
+                (35.8050, 51.4330),
+                (35.7860, 51.4160),
+                (35.7700, 51.4050),
+                (35.7500, 51.3980),
+                (35.7300, 51.3930),
+                (35.7100, 51.3890),
+                (35.6900, 51.3840),
+                (35.6700, 51.3790)
+            }, "#2563eb", 5, 0.85)
+            .Polygon(new[]
+            {
+                (35.7480, 51.3620),
+                (35.7520, 51.3760),
+                (35.7430, 51.3840),
+                (35.7360, 51.3700)
+            }, "#059669", 2, 0.9, 0.16)
+            .Circle(35.7448, 51.3752, 1200, "#dc2626", 0.10)
+            .CoordinatesControl()
+            .Events(events => events
+                .Click("mapClick")
+                .MoveEnd("mapMoveEnd")
+                .ZoomEnd("mapZoomEnd")
+                .MarkerClick("mapMarkerClick")
+                .MarkerDragEnd("mapMarkerDragEnd"))
+            .Marker(35.7200, 51.4200, marker => marker
+                .Title("نشانگر قابل جابه‌جایی")
+                .Popup("این نشانگر را با ماوس یا انگشت جابه‌جا کنید.")
+                .Icon("arrows-move")
+                .Tone(MapTones.Danger)
+                .Draggable()))
+    </div>
+
+    <div class="col-12 col-xl-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column gap-3">
+                <h2 class="h6 mb-0">رویدادها و API کلاینت</h2>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-primary"
+                            onclick="mapReset()">
+                        بازگشت به تهران
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            onclick="mapShowIran()">
+                        نمایش کل ایران
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success"
+                            onclick="mapAddMarker()">
+                        افزودن نشانگر
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            onclick="mapRemoveMarker()">
+                        حذف نشانگر
+                    </button>
+                </div>
+                <div>
+                    <div class="text-muted small mb-1">آخرین رویدادها</div>
+                    <pre id="mapEventLog"
+                         class="bg-light border rounded p-2 mb-0 small"
+                         style="min-height:150px;white-space:pre-wrap;direction:rtl">—</pre>
+                </div>
+                <div class="text-muted small mb-0">
+                    نمونه API:
+                    <code>Tech.Map.get('mapTehran').fitBounds([...])</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <h2 class="h5 mt-2">منبع نقشه، لایه‌ها، جستجو و موقعیت من</h2>
+        <p class="text-muted">
+            چهار منبع آماده از <code>MapSources</code> استفاده شده است
+            (OpenStreetMap، توپوگرافی، نقشه روشن و تصاویر ماهواره‌ای)؛
+            با دکمه لایه‌ها بین آن‌ها جابه‌جا شوید. جستجو از Nominatim
+            استفاده می‌کند و دکمه موقعیت من با اجازه مرورگر مکان فعلی را
+            نمایش می‌دهد.
+        </p>
+
+        @(Html.Tech().Map("mapExplorer")
+            .Height(440)
+            .Center(35.6892, 51.3890)
+            .Zoom(11)
+            .MinZoom(3)
+            .MaxZoom(19)
+            .AriaLabel("نقشه کاوشگر با لایه‌ها و جستجو")
+            .Layer(MapSources.OpenStreetMap, selected: true)
+            .Layer(MapSources.OpenTopoMap)
+            .Layer(MapSources.CartoLight)
+            .Layer(MapSources.EsriSatellite)
+            .Search(
+                "https://nominatim.openstreetmap.org/search",
+                "جستجوی مکان، مثلاً میدان آزادی…")
+            .CoordinatesControl()
+            .LayerControl()
+            .FullscreenControl()
+            .LocateControl()
+            .Events(events => events
+                .Search("mapSearch")
+                .Locate("mapLocate")))
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <h2 class="h5 mt-2">منبع واحد با <code>Source(MapSource)</code></h2>
+        <p class="text-muted small">
+            کل نقشه از یک منبع آماده استفاده می‌کند؛ URL، انتساب و سقف زوم
+            از <code>MapSources.CartoDark</code> گرفته می‌شود.
+        </p>
+
+        @(Html.Tech().Map("mapDarkSource")
+            .Height(300)
+            .Center(35.6892, 51.3890)
+            .Zoom(11)
+            .Source(MapSources.CartoDark)
+            .Marker(35.6997, 51.3381, "برج آزادی", "میدان آزادی", "building")
+            .AriaLabel("نقشه تاریک تهران"))
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <h2 class="h5 mt-2">منبع با کلید رشته‌ای</h2>
+        <p class="text-muted small">
+            <code>Source("satellite")</code> منبع را با کلید یا نام فارسی
+            (مثلاً «توپوگرافی») پیدا می‌کند؛ URL کاشی دارای
+            <code>{z}</code> هم پذیرفته می‌شود.
+        </p>
+
+        @(Html.Tech().Map("mapSatelliteSource")
+            .Height(300)
+            .Center(35.6892, 51.3890)
+            .Zoom(11)
+            .Source("satellite")
+            .Marker(35.7448, 51.3752, "برج میلاد", "برج میلاد", "broadcast", MapTones.Danger)
+            .AriaLabel("نقشه ماهواره‌ای تهران"))
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        let mapMarkerSeq = 0;
+        const mapAddedMarkers = [];
+
+        function mapLog(title, detail) {
+            const log = document.getElementById('mapEventLog');
+
+            if (!log) return;
+
+            const time = new Date().toLocaleTimeString('fa-IR');
+            const line = '[' + time + '] ' + title + ' — ' + detail;
+
+            log.textContent = log.textContent === '—'
+                ? line
+                : line + '\n' + log.textContent.split('\n').slice(0, 6).join('\n');
+        }
+
+        function coordText(payload) {
+            return payload.lat.toFixed(5) + ', ' + payload.lng.toFixed(5);
+        }
+
+        window.mapClick = function (payload) {
+            mapLog('کلیک روی نقشه', coordText(payload));
+        };
+
+        window.mapMoveEnd = function (payload) {
+            mapLog('پایان جابه‌جایی',
+                'مرکز ' + payload.center.lat.toFixed(4) + ', ' +
+                payload.center.lng.toFixed(4) +
+                ' — زوم ' + payload.zoom.toFixed(1));
+        };
+
+        window.mapZoomEnd = function (payload) {
+            mapLog('تغییر زوم', 'زوم ' + payload.zoom.toFixed(1));
+        };
+
+        window.mapMarkerClick = function (payload) {
+            mapLog('کلیک نشانگر', payload.title || payload.id);
+        };
+
+        window.mapMarkerDragEnd = function (payload) {
+            mapLog('جابه‌جایی نشانگر', payload.id + ' — ' + coordText(payload));
+        };
+
+        window.mapSearch = function (payload) {
+            mapLog('جستجو', '«' + payload.query + '» — ' +
+                payload.results.length + ' نتیجه');
+        };
+
+        window.mapLocate = function (payload) {
+            mapLog('موقعیت من', payload.error
+                ? 'دسترسی داده نشد'
+                : coordText(payload));
+        };
+
+        window.mapReset = function () {
+            const map = Tech.Map.get('mapTehran');
+
+            if (map) {
+                map.setView({ lat: 35.71, lng: 51.39 }, 12, true);
+            }
+        };
+
+        window.mapShowIran = function () {
+            const map = Tech.Map.get('mapTehran');
+
+            if (map) {
+                map.fitBounds([[25.05, 44.03], [39.78, 63.33]]);
+            }
+        };
+
+        window.mapAddMarker = function () {
+            const map = Tech.Map.get('mapTehran');
+
+            if (!map) return;
+
+            const center = map.getCenter();
+            const lat = center.lat + (Math.random() - 0.5) * 0.05;
+            const lng = center.lng + (Math.random() - 0.5) * 0.07;
+            const id = 'api-marker-' + (++mapMarkerSeq);
+
+            map.addMarker({
+                id: id,
+                lat: lat,
+                lng: lng,
+                title: 'نشانگر API ' + mapMarkerSeq,
+                popup: '<div class="tech-map-popup-title">نشانگر API</div>'
+                    + '<div class="tech-map-popup-text">'
+                    + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</div>',
+                icon: 'geo-alt-fill',
+                tone: 'warning',
+                open: true
+            });
+
+            mapAddedMarkers.push(id);
+            mapLog('افزودن نشانگر', id);
+        };
+
+        window.mapRemoveMarker = function () {
+            const map = Tech.Map.get('mapTehran');
+            const id = mapAddedMarkers.pop();
+
+            if (!map || !id) return;
+
+            map.removeMarker(id);
+            mapLog('حذف نشانگر', id);
+        };
+    </script>
+}

@@ -10,8 +10,9 @@ TagHelpers, and Persian-first defaults.
 - Client + server validation from DataAnnotations and `ModelState`.
 - Grid, DropDownList, MultiSelect/Tag Input, inputs, editor, tabs, accordion,
   tree view, dropdown tree, wizard/stepper, timeline, breadcrumb, file upload,
-  captcha, spinner, toast, dialog and dependency-free SVG charts (23 chart
-  types).
+  captcha, spinner, toast, dialog, dependency-free SVG charts (23 chart
+  types) and a dependency-free OpenStreetMap map with markers, popups, shapes,
+  layers, search and geolocation.
 - Standalone Chat panel with assistant (single request/reply) and support
   (deliver + poll or realtime push) modes; styled by the active theme tokens.
 - Optional Grid assistant chat panel with a provider-agnostic request/response
@@ -141,6 +142,41 @@ waterfall, candlestick, bullet, sparkline and spark bar; series can mix types
 ```js
 Tech.Chart.get('sales').update({ series: [/* ... */] });
 Tech.Chart.render('#dynamicChart');
+```
+
+## Map
+
+```razor
+@using TechUI.Mvc.Map
+
+@(Html.Tech().Map("tehran")
+    .Height(480)
+    .Center(35.71, 51.39)
+    .Zoom(12)
+    .Marker(35.6997, 51.3380, "میدان آزادی", "<b>میدان آزادی</b>", "building")
+    .Marker(35.7522, 51.3756, "برج میلاد", "بلندترین برج ایران", "broadcast", MapTones.Info)
+    .Layer(MapSources.OpenStreetMap, selected: true)
+    .Layer(MapSources.CartoLight)
+    .Layer(MapSources.EsriSatellite)
+    .CoordinatesControl())
+```
+
+An OpenStreetMap slippy map with no Leaflet/MapLibre dependency: drag, wheel and
+pinch zoom, keyboard pan/zoom, markers with HTML popups and dragging, polylines,
+polygons, circles by meters, multiple base layers, Nominatim search,
+geolocation, fullscreen, scale and coordinate readouts. Built-in providers live
+in `MapSources` (`OpenStreetMap`, `CartoLight`, `CartoDark`, `OpenTopoMap`,
+`EsriSatellite`); use `.Source(MapSources.X)` for a single provider or add them
+as switchable `.Layer(...)` entries. Tiles load over the network; turn on
+`Search(...)` to show the search box. Runtime API:
+
+```js
+const map = Tech.Map.get('tehran');
+map.setView({ lat: 35.7, lng: 51.4 }, 14, true);
+const pin = map.addMarker({ lat: 35.7, lng: 51.4, title: 'نقطه', popup: 'توضیح' });
+pin.remove();
+map.fitBounds([[25.05, 44.03], [39.78, 63.33]]);
+map.on('zoomEnd', handler);
 ```
 
 ## FileUpload
@@ -298,8 +334,8 @@ Sample applications (run from the repository root):
 - `src/samples/TechUI.SampleMvc` — component gallery (each component in isolation):
   `dotnet run --project src/samples/TechUI.SampleMvc`
 - `src/samples/TechUI.SampleAdmin` — complete Persian admin panel with EF Core
-  SQLite, dashboard, server-side grids, validated CRUD, reports and settings:
-  `dotnet run --project src/samples/TechUI.SampleAdmin`
+  SQLite, dashboard, server-side grids, validated CRUD, reports, a customer map
+  and settings: `dotnet run --project src/samples/TechUI.SampleAdmin`
 
 ## License
 

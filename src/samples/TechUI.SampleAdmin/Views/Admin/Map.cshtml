@@ -1,0 +1,226 @@
+@model MapViewModel
+@using System.Globalization
+@using TechUI.Mvc.Map
+@inject SettingsService AppSettings
+@{
+    var fa = CultureInfo.GetCultureInfo("fa-IR");
+    var currency = AppSettings.Load().Currency;
+
+    string Number(decimal value) => value.ToString("N0", fa);
+    string Money(decimal value) => Number(value) + " " + currency;
+    string Percent(decimal part) => Model.Revenue == 0
+        ? "۰٪"
+        : (part * 100m / Model.Revenue).ToString("N0", fa) + "٪";
+
+    var map = Html.Tech().Map("customerMap")
+        .Height(520)
+        .Center(32.4279, 53.6880)
+        .Zoom(5)
+        .MinZoom(3)
+        .MaxZoom(18)
+        .AriaLabel("نقشه پراکندگی مشتریان و فروش شهرها")
+        .Layer(MapSources.OpenStreetMap, selected: true)
+        .Layer(MapSources.CartoLight)
+        .Layer(MapSources.EsriSatellite)
+        .Search(
+            "https://nominatim.openstreetmap.org/search",
+            "جستجوی مکان روی نقشه…")
+        .CoordinatesControl()
+        .LayerControl()
+        .FullscreenControl()
+        .LocateControl()
+        .Events(events => events
+            .MarkerClick("adminMapCityClick")
+            .Search("adminMapSearch")
+            .Locate("adminMapLocate"));
+
+    for (var index = 0; index < Model.Cities.Count; index++)
+    {
+        var city = Model.Cities[index];
+        var tone = index < 2
+            ? MapTones.Success
+            : index < 5
+                ? MapTones.Primary
+                : MapTones.Info;
+
+        var popup = "<div class=\"tech-map-popup-title\">" + city.City
+            + "</div><div class=\"tech-map-popup-text\">"
+            + Number(city.Customers) + " مشتری ("
+            + Number(city.ActiveCustomers) + " فعال)<br />"
+            + Number(city.Orders) + " سفارش — درآمد "
+            + Money(city.Revenue) + "<br />اعتبار مشتریان: "
+            + Money(city.Credit) + "</div>";
+
+        map.Marker(city.Lat, city.Lng, marker => marker
+            .Id("city-" + city.City)
+            .Title(city.City)
+            .Popup(popup)
+            .Icon("geo-alt-fill")
+            .Tone(tone));
+    }
+}
+
+<div class="stat-grid">
+    <div class="stat-card green">
+        <div>
+            <div class="stat-label">درآمد شهرها</div>
+            <div class="stat-value">@Money(Model.Revenue)</div>
+            <div class="stat-hint">
+                بدون سفارش‌های لغوشده در @Number(Model.CityCount) شهر
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-cash-coin"></i></span>
+    </div>
+
+    <div class="stat-card blue">
+        <div>
+            <div class="stat-label">سفارش‌ها</div>
+            <div class="stat-value">@Number(Model.OrderCount)</div>
+            <div class="stat-hint">
+                میانگین هر شهر:
+                @Number(Model.CityCount == 0 ? 0 : Math.Round(Model.OrderCount / (decimal)Model.CityCount))
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-bag-check"></i></span>
+    </div>
+
+    <div class="stat-card violet">
+        <div>
+            <div class="stat-label">مشتریان روی نقشه</div>
+            <div class="stat-value">@Number(Model.CustomerCount)</div>
+            <div class="stat-hint">
+                @Number(Model.ActiveCustomerCount) مشتری فعال
+            </div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-people"></i></span>
+    </div>
+
+    <div class="stat-card amber">
+        <div>
+            <div class="stat-label">شهرهای پوشش‌داده‌شده</div>
+            <div class="stat-value">@Number(Model.CityCount)</div>
+            <div class="stat-hint">شهر دارای مشتری ثبت‌شده</div>
+        </div>
+        <span class="stat-icon"><i class="bi bi-geo-alt"></i></span>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-xl-8">
+        <section class="admin-card h-100">
+            <div class="admin-card-header">
+                <div>
+                    <h2>پراکندگی مشتریان</h2>
+                    <small>
+                        نشانگرها بر اساس درآمد مرتب شده‌اند؛ برای خلاصه‌ی هر شهر
+                        روی نشانگر کلیک کنید و منبع نقشه را از دکمه‌ی لایه‌ها
+                        عوض کنید.
+                    </small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                            onclick="adminMapShowAll()">
+                        کل کشور
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            onclick="adminMapTehran()">
+                        تهران
+                    </button>
+                </div>
+            </div>
+            <div class="admin-card-body">
+                @map
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                    <div class="small text-muted" id="mapCityFocus">
+                        برای جزئیات، روی نشانگر یک شهر کلیک کنید.
+                    </div>
+                    <div class="small text-muted">
+                        منابع: OpenStreetMap، CARTO روشن و تصاویر ماهواره‌ای Esri
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-4">
+        <section class="admin-card h-100">
+            <div class="admin-card-header">
+                <div>
+                    <h2>خلاصه شهرها</h2>
+                    <small>مرتب‌شده بر اساس درآمد</small>
+                </div>
+            </div>
+            <div class="admin-card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover admin-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>شهر</th>
+                                <th>مشتری</th>
+                                <th>سفارش</th>
+                                <th>درآمد</th>
+                                <th>سهم</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var city in Model.Cities)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@city.City</td>
+                                    <td>@Number(city.Customers)</td>
+                                    <td>@Number(city.Orders)</td>
+                                    <td>@Money(city.Revenue)</td>
+                                    <td>
+                                        <span class="badge text-bg-primary">
+                                            @Percent(city.Revenue)
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        window.adminMapCityClick = function (payload) {
+            const focus = document.getElementById('mapCityFocus');
+
+            if (focus) {
+                focus.textContent = 'شهر انتخاب‌شده: ' + (payload.title || payload.id);
+            }
+        };
+
+        window.adminMapSearch = function (payload) {
+            Tech.notify('جستجو: «' + payload.query + '» — ' +
+                payload.results.length + ' نتیجه', { type: 'info' });
+        };
+
+        window.adminMapLocate = function (payload) {
+            Tech.notify(payload.error
+                ? 'دسترسی به موقعیت مکانی ممکن نیست.'
+                : 'موقعیت شما روی نقشه نمایش داده شد.',
+                { type: payload.error ? 'warning' : 'success' });
+        };
+
+        window.adminMapShowAll = function () {
+            const map = Tech.Map.get('customerMap');
+
+            if (map) {
+                map.fitBounds([[25.05, 44.03], [39.78, 63.33]]);
+            }
+        };
+
+        window.adminMapTehran = function () {
+            const map = Tech.Map.get('customerMap');
+
+            if (map) {
+                map.setView({ lat: 35.6892, lng: 51.3890 }, 10, true);
+            }
+        };
+    </script>
+}
