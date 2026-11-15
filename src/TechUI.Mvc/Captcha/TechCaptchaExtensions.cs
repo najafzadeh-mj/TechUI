@@ -79,6 +79,7 @@ namespace TechUI.Mvc.Captcha
             {
                 "digits" => CaptchaKind.Digits,
                 "math" => CaptchaKind.Math,
+                "words" or "numberwords" => CaptchaKind.NumberWords,
                 _ => CaptchaKind.Letters
             };
         }

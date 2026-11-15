@@ -1475,7 +1475,8 @@ app.MapTechUICaptcha();   // GET /techui/captcha
 
 `MapTechUICaptcha(pattern)` یک endpoint از نوع `GET` ثبت می‌کند که پاسخ JSON
 `{ token, image, expiresAt }` با هدر `Cache-Control: no-store` برمی‌گرداند و
-پارامترهای `language`, `kind`, `operation`, `length` و `noise` را می‌پذیرد.
+پارامترهای `language`، `kind` (`letters`/`digits`/`math`/`words`)،
+`operation`، `length` و `noise` را می‌پذیرد.
 دکمهٔ بازخوانی تصویر از همین آدرس استفاده می‌کند.
 
 ### استفاده در فرم
@@ -1509,10 +1510,10 @@ input مخفی `{name}Token` است که توکن امضاشده را نگه م�
 | --- | --- | --- |
 | `Name(string)` | نام سازنده | نام فیلد پاسخ؛ فیلد توکن `{name}Token` می‌شود |
 | `Language(CaptchaLanguage)` | `Persian` | الفبا و ارقام نمایش‌داده‌شده |
-| `Kind(CaptchaKind)` | `Letters` | نوع چالش: حروف، ارقام یا محاسبه |
+| `Kind(CaptchaKind)` | `Letters` | نوع چالش: حروف، ارقام، محاسبه یا عدد با حروف |
 | `MathOperation(CaptchaMathOperation)` | `Addition` | عملگر چالش ریاضی |
 | `Noise(CaptchaNoiseLevel)` | پیش‌فرض سرور | میزان نویز تصویر: `None`, `Low`, `Medium`, `High` |
-| `Length(int)` | `5` | تعداد حروف/ارقام؛ به بازهٔ ۳ تا ۸ محدود می‌شود و برای `Math` نادیده گرفته می‌شود |
+| `Length(int)` | `5` | تعداد حروف/ارقام؛ به بازهٔ ۳ تا ۸ محدود می‌شود. برای `NumberWords` تعداد ارقام عدد و در بازهٔ ۲ تا ۵ است (پیش‌فرض ۴). برای `Math` نادیده گرفته می‌شود |
 | `Placeholder(string)` | متن پیش‌فرض زبان | متن راهنمای input |
 | `RefreshUrl(string)` | `/techui/captcha` | آدرس endpoint بازخوانی |
 | `CssClass(string)` / `Attribute(name, value)` | — | کلاس و ویژگی اضافه روی ریشه |
@@ -1525,7 +1526,7 @@ input مخفی `{name}Token` است که توکن امضاشده را نگه م�
 | enum | مقادیر | رفتار |
 | --- | --- | --- |
 | `CaptchaLanguage` | `Persian`, `English` | حروف فارسی/انگلیسی؛ ارقام در حالت فارسی به‌صورت ۰..۹ فارسی و در حالت انگلیسی لاتین نمایش داده می‌شوند |
-| `CaptchaKind` | `Letters`, `Digits`, `Math` | حروف تصادفی، ارقام تصادفی یا سؤال ریاضی |
+| `CaptchaKind` | `Letters`, `Digits`, `Math`, `NumberWords` | حروف تصادفی، ارقام تصادفی، سؤال ریاضی یا عدد نوشته‌شده با حروف که پاسخ آن رقم است |
 | `CaptchaMathOperation` | `Addition`, `Subtraction`, `Multiplication` | جمع (۲..۹ + ۲..۹)، تفریق (۶..۱۲ منهای عددی کوچک‌تر از آن) و ضرب (۲..۹ × ۲..۹) |
 | `CaptchaNoiseLevel` | `None`, `Low`, `Medium`, `High` | تعداد خطوط، منحنی‌ها و نقطه‌های نویز و دامنهٔ چرخش متن؛ `Medium` پیش‌فرض است و `None` تصویر کاملاً تمیز می‌دهد |
 
@@ -1535,6 +1536,29 @@ input مخفی `{name}Token` است که توکن امضاشده را نگه م�
 بیشترین چگالی و جابه‌جایی را دارد.
 
 در الفبای انگلیسی حروف مبهم `I` و `O` حذف شده‌اند.
+
+### عدد با حروف (`NumberWords`)
+
+در این حالت تصویر یک عدد را به‌صورت نوشتاری نشان می‌دهد و کاربر باید رقم آن
+را وارد کند؛ مثلاً تصویر «چهار هزار و سیصد و پنجاه و دو» را نشان می‌دهد و
+پاسخ درست `4352` است:
+
+```razor
+@(Html.Tech().Captcha("Captcha")
+    .Language(CaptchaLanguage.Persian)
+    .Kind(CaptchaKind.NumberWords)
+    .Length(4))   // تعداد ارقام عدد: ۲ تا ۵، پیش‌فرض ۴
+```
+
+- برای فارسی از «و» بین بخش‌ها استفاده می‌شود (هزار، صد، ده، یک) و متن
+  راست‌به‌چپ رسم می‌شود. برای انگلیسی هم اعداد به حروف انگلیسی نوشته
+  می‌شوند (`four thousand three hundred fifty-two`).
+- متن در صورت نیاز به دو یا سه خط شکسته می‌شود و اندازهٔ فونت به‌طور خودکار
+  کوچک می‌شود تا در تصویر جا شود؛ نویز و چرخش مثل بقیهٔ حالت‌ها اعمال می‌شود.
+- پاسخ را می‌توان با ارقام فارسی/عربی یا لاتین و با جداکننده‌های هزارگان
+  (`٬` یا `,`) وارد کرد؛ جداکننده‌ها قبل از مقایسه حذف می‌شوند.
+- برای امنیت بیشتر `Length` را ۳ یا ۴ نگه دارید؛ عددهای چندرقمی طولانی
+  متن را شلوغ می‌کنند.
 
 ### اعتبارسنجی سمت سرور
 
@@ -1560,23 +1584,37 @@ public async Task<IActionResult> Captcha(CaptchaSampleModel model)
 زمان، پاسخ خالی و پاسخ نادرست.
 
 پاسخ ارسالی قبل از مقایسه نرمال می‌شود: ارقام فارسی و عربی به لاتین تبدیل
-می‌شوند، فاصله و نویسه‌های ZWNJ/ZWJ حذف می‌شوند، `ي`/`ك` عربی به `ی`/`ک`
-نگاشت می‌شود و مقایسه به بزرگی/کوچکی حروف حساس نیست.
+می‌شوند، فاصله، نویسه‌های ZWNJ/ZWJ و جداکننده‌های هزارگان (`٬`, `,`, `،`)
+حذف می‌شوند، `ي`/`ك` عربی به `ی`/`ک` نگاشت می‌شود و مقایسه به بزرگی/کوچکی
+حروف حساس نیست.
 
 ### API کلاینت
 
 ```js
 const captcha = Tech.Captcha.get('Captcha');
 
-captcha.answer();         // مقدار واردشده
-captcha.token();          // توکن مخفی جاری
-await captcha.refresh();  // دریافت تصویر و توکن جدید
+captcha.answer();           // مقدار واردشده
+captcha.token();            // توکن مخفی جاری
+captcha.kind();             // نوع فعلی: letters | digits | math | words
+await captcha.refresh();    // دریافت تصویر و توکن جدید
+await captcha.setKind('words'); // تغییر نوع چالش + تصویر جدید
 
-Tech.Captcha.refresh('Captcha');  // میان‌بر
+Tech.Captcha.refresh('Captcha');          // میان‌بر
+Tech.Captcha.setKind('Captcha', 'digits'); // میان‌بر
+```
+
+`refresh` و `setKind` یک شیء گزینهٔ اختیاری می‌پذیرند تا همان نمونه با
+تنظیمات موقت بازخوانی شود؛ نوع انتخابی در `data-kind` ذخیره می‌شود و
+بازخوانی‌های بعدی آن را حفظ می‌کنند:
+
+```js
+Tech.Captcha.refresh('Captcha', { kind: 'words', length: 4 });
+Tech.Captcha.refresh('Captcha', { language: 'en', kind: 'letters' });
 ```
 
 بازخوانی، input را پاک و خطای قبلی را حذف می‌کند و زبان، نوع چالش و سطح
-نویز را از `data-*` همان کنترل حفظ می‌کند. خطای شبکه یا سرور با
+نویز را از `data-*` همان کنترل حفظ می‌کند. با تغییر نوع حروف/عددی،
+`inputmode` و متن راهنمای input هم به‌روزرسانی می‌شوند. خطای شبکه یا سرور با
 رویداد `Error` روی ریشه و payload `{ error }` اعلام می‌شود؛ نام تابع گیرنده
 را با `data-event-error` تنظیم کنید:
 

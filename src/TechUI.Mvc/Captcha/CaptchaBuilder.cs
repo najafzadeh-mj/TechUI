@@ -163,6 +163,7 @@ namespace TechUI.Mvc.Captcha
             {
                 CaptchaKind.Digits => "digits",
                 CaptchaKind.Math => "math",
+                CaptchaKind.NumberWords => "words",
                 _ => "letters"
             };
             root.Attributes["data-operation"] = _operation switch
@@ -174,8 +175,13 @@ namespace TechUI.Mvc.Captcha
 
             if (_kind != CaptchaKind.Math)
             {
-                root.Attributes["data-length"] =
-                    (_length > 0 ? Math.Clamp(_length, 3, 8) : 5)
+                var defaultLength = _kind == CaptchaKind.NumberWords ? 4 : 5;
+                var minLength = _kind == CaptchaKind.NumberWords ? 2 : 3;
+                var maxLength = _kind == CaptchaKind.NumberWords ? 5 : 8;
+
+                root.Attributes["data-length"] = (_length > 0
+                    ? Math.Clamp(_length, minLength, maxLength)
+                    : defaultLength)
                     .ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
@@ -256,12 +262,18 @@ namespace TechUI.Mvc.Captcha
             input.AddCssClass("form-control tech-input-control tech-captcha-answer");
             input.Attributes["placeholder"] = _placeholder
                 ?? (isEnglish
-                    ? (_kind == CaptchaKind.Math
-                        ? "Enter the sum"
-                        : "Enter the security code")
-                    : (_kind == CaptchaKind.Math
-                        ? "حاصل جمع را وارد کنید"
-                        : "کد امنیتی را وارد کنید"));
+                    ? (_kind switch
+                    {
+                        CaptchaKind.Math => "Enter the sum",
+                        CaptchaKind.NumberWords => "Type the number",
+                        _ => "Enter the security code"
+                    })
+                    : (_kind switch
+                    {
+                        CaptchaKind.Math => "حاصل جمع را وارد کنید",
+                        CaptchaKind.NumberWords => "عدد نوشته‌شده را وارد کنید",
+                        _ => "کد امنیتی را وارد کنید"
+                    }));
 
             if (isNumeric)
             {

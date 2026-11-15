@@ -36,6 +36,43 @@ namespace TechUI.Mvc.Captcha
             "#1e293b", "#0f172a", "#334155", "#1f2937"
         };
 
+        private static readonly string[] PersianOnes =
+        {
+            "", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه"
+        };
+
+        private static readonly string[] PersianTeens =
+        {
+            "ده", "یازده", "دوازده", "سیزده", "چهارده",
+            "پانزده", "شانزده", "هفده", "هجده", "نوزده"
+        };
+
+        private static readonly string[] PersianTens =
+        {
+            "", "", "بیست", "سی", "چهل", "پنجاه",
+            "شصت", "هفتاد", "هشتاد", "نود"
+        };
+
+        private static readonly string[] PersianHundreds =
+        {
+            "", "صد", "دویست", "سیصد", "چهارصد", "پانصد",
+            "ششصد", "هفتصد", "هشتصد", "نهصد"
+        };
+
+        private static readonly string[] EnglishOnes =
+        {
+            "zero", "one", "two", "three", "four", "five", "six",
+            "seven", "eight", "nine", "ten", "eleven", "twelve",
+            "thirteen", "fourteen", "fifteen", "sixteen",
+            "seventeen", "eighteen", "nineteen"
+        };
+
+        private static readonly string[] EnglishTens =
+        {
+            "", "", "twenty", "thirty", "forty",
+            "fifty", "sixty", "seventy", "eighty", "ninety"
+        };
+
         private readonly TechCaptchaOptions _options;
         private readonly byte[] _key;
 
@@ -54,12 +91,18 @@ namespace TechUI.Mvc.Captcha
         {
             ArgumentNullException.ThrowIfNull(request);
 
-            var length = request.Kind == CaptchaKind.Math
-                ? 0
-                : Math.Clamp(
+            var length = request.Kind switch
+            {
+                CaptchaKind.Math => 0,
+                CaptchaKind.NumberWords => Math.Clamp(
+                    request.Length <= 0 ? 4 : request.Length,
+                    2,
+                    5),
+                _ => Math.Clamp(
                     request.Length <= 0 ? 5 : request.Length,
                     3,
-                    8);
+                    8)
+            };
 
             var (display, answer) = BuildChallenge(request, length);
 
@@ -84,7 +127,11 @@ namespace TechUI.Mvc.Captcha
             return new TechCaptchaChallenge
             {
                 Token = Protect(payload),
-                ImageDataUri = BuildSvg(display, request.Language, noise),
+                ImageDataUri = BuildSvg(
+                    display,
+                    request.Language,
+                    noise,
+                    request.Kind == CaptchaKind.NumberWords),
                 ExpiresAtUtc = expiresAt
             };
         }
@@ -144,6 +191,11 @@ namespace TechUI.Mvc.Captcha
                 return BuildMath(request);
             }
 
+            if (request.Kind == CaptchaKind.NumberWords)
+            {
+                return BuildNumberWords(request, length);
+            }
+
             var source = request.Kind == CaptchaKind.Digits
                 ? DigitSet
                 : request.Language == CaptchaLanguage.Persian
@@ -165,6 +217,130 @@ namespace TechUI.Mvc.Captcha
                 : LocalizeDigits(answer, request.Language);
 
             return (display, answer);
+        }
+
+        private static (string Display, string Answer) BuildNumberWords(
+            TechCaptchaRequest request,
+            int digits)
+        {
+            var min = (int)Math.Pow(10, digits - 1);
+            var max = (int)Math.Pow(10, digits) - 1;
+            var value = RandomNumberGenerator.GetInt32(min, max + 1);
+
+            var words = request.Language == CaptchaLanguage.Persian
+                ? NumberToPersianWords(value)
+                : NumberToEnglishWords(value);
+
+            return (words, value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string NumberToPersianWords(int value)
+        {
+            if (value <= 0)
+            {
+                return "صفر";
+            }
+
+            var parts = new List<string>(3);
+
+            if (value >= 1000)
+            {
+                parts.Add(NumberToPersianWordsUnder1000(value / 1000) + " هزار");
+                value %= 1000;
+            }
+
+            if (value > 0)
+            {
+                parts.Add(NumberToPersianWordsUnder1000(value));
+            }
+
+            return string.Join(" و ", parts);
+        }
+
+        private static string NumberToPersianWordsUnder1000(int value)
+        {
+            var parts = new List<string>(3);
+
+            var hundreds = value / 100;
+
+            if (hundreds > 0)
+            {
+                parts.Add(PersianHundreds[hundreds]);
+            }
+
+            var rest = value % 100;
+
+            if (rest >= 10 && rest < 20)
+            {
+                parts.Add(PersianTeens[rest - 10]);
+            }
+            else
+            {
+                if (rest >= 20)
+                {
+                    parts.Add(PersianTens[rest / 10]);
+                }
+
+                if (rest % 10 > 0)
+                {
+                    parts.Add(PersianOnes[rest % 10]);
+                }
+            }
+
+            return string.Join(" و ", parts);
+        }
+
+        private static string NumberToEnglishWords(int value)
+        {
+            if (value <= 0)
+            {
+                return "zero";
+            }
+
+            var parts = new List<string>(3);
+
+            if (value >= 1000)
+            {
+                parts.Add(NumberToEnglishWordsUnder1000(value / 1000) +
+                    " thousand");
+                value %= 1000;
+            }
+
+            if (value > 0)
+            {
+                parts.Add(NumberToEnglishWordsUnder1000(value));
+            }
+
+            return string.Join(' ', parts);
+        }
+
+        private static string NumberToEnglishWordsUnder1000(int value)
+        {
+            var parts = new List<string>(3);
+
+            if (value >= 100)
+            {
+                parts.Add(EnglishOnes[value / 100] + " hundred");
+                value %= 100;
+            }
+
+            if (value >= 20)
+            {
+                var tens = EnglishTens[value / 10];
+
+                if (value % 10 > 0)
+                {
+                    tens += "-" + EnglishOnes[value % 10];
+                }
+
+                parts.Add(tens);
+            }
+            else if (value > 0)
+            {
+                parts.Add(EnglishOnes[value]);
+            }
+
+            return string.Join(' ', parts);
         }
 
         private static (string Display, string Answer) BuildMath(
@@ -215,7 +391,8 @@ namespace TechUI.Mvc.Captcha
         private string BuildSvg(
             string text,
             CaptchaLanguage language,
-            CaptchaNoiseLevel noise)
+            CaptchaNoiseLevel noise,
+            bool words = false)
         {
             var width = Math.Clamp(_options.ImageWidth, 140, 400);
             var height = Math.Clamp(_options.ImageHeight, 44, 120);
@@ -318,70 +495,77 @@ namespace TechUI.Mvc.Captcha
                     .Append("\" opacity=\"").Append(dotOpacity).Append("\"/>");
             }
 
-            var advance = fontSize *
-                (language == CaptchaLanguage.Persian ? 0.72 : 0.78);
-            var advances = new double[text.Length];
-            var total = 0.0;
-
-            for (var index = 0; index < text.Length; index++)
+            if (words)
             {
-                var factor = char.IsWhiteSpace(text[index])
-                    ? 0.55
-                    : 1 + Jitter(widthJitter);
-
-                advances[index] = advance * factor;
-                total += advances[index];
+                AppendWordLines(svg, text, language, width, height, noise);
             }
-
-            var available = width - 20.0;
-            var scale = total > available ? available / total : 1.0;
-            var cursor = (width - total * scale) / 2.0;
-
-            for (var index = 0; index < text.Length; index++)
+            else
             {
-                var glyphWidth = advances[index] * scale;
+                var advance = fontSize *
+                    (language == CaptchaLanguage.Persian ? 0.72 : 0.78);
+                var advances = new double[text.Length];
+                var total = 0.0;
 
-                if (!char.IsWhiteSpace(text[index]))
+                for (var index = 0; index < text.Length; index++)
                 {
-                    var centerX = cursor + glyphWidth / 2;
-                    var glyphSize = fontSize * (1 + Jitter(sizeJitter));
-                    var baseline = centerY + glyphSize / 3 +
-                        Jitter(fontSize * yJitter);
+                    var factor = char.IsWhiteSpace(text[index])
+                        ? 0.55
+                        : 1 + Jitter(widthJitter);
 
-                    baseline = Math.Clamp(
-                        baseline,
-                        glyphSize * 0.9,
-                        height - 4);
-
-                    var angle = rotationRange == 0
-                        ? 0
-                        : Random.Shared.Next(-rotationRange, rotationRange + 1);
-
-                    svg.Append("<text x=\"").Append(Format(centerX))
-                        .Append("\" y=\"").Append(Format(baseline))
-                        .Append("\" text-anchor=\"middle\"")
-                        .Append(" font-family=\"").Append(family).Append('"')
-                        .Append(" font-size=\"").Append(Format(glyphSize))
-                        .Append("\" font-weight=\"700\" fill=\"")
-                        .Append(noise == CaptchaNoiseLevel.High
-                            ? GlyphColors[Random.Shared.Next(GlyphColors.Length)]
-                            : "#1e293b")
-                        .Append("\"");
-
-                    if (angle != 0)
-                    {
-                        svg.Append(" transform=\"rotate(").Append(angle)
-                            .Append(' ').Append(Format(centerX)).Append(' ')
-                            .Append(Format(baseline - glyphSize / 3))
-                            .Append(")\"");
-                    }
-
-                    svg.Append('>')
-                        .Append(WebUtility.HtmlEncode(text[index].ToString()))
-                        .Append("</text>");
+                    advances[index] = advance * factor;
+                    total += advances[index];
                 }
 
-                cursor += glyphWidth;
+                var available = width - 20.0;
+                var scale = total > available ? available / total : 1.0;
+                var cursor = (width - total * scale) / 2.0;
+
+                for (var index = 0; index < text.Length; index++)
+                {
+                    var glyphWidth = advances[index] * scale;
+
+                    if (!char.IsWhiteSpace(text[index]))
+                    {
+                        var centerX = cursor + glyphWidth / 2;
+                        var glyphSize = fontSize * (1 + Jitter(sizeJitter));
+                        var baseline = centerY + glyphSize / 3 +
+                            Jitter(fontSize * yJitter);
+
+                        baseline = Math.Clamp(
+                            baseline,
+                            glyphSize * 0.9,
+                            height - 4);
+
+                        var angle = rotationRange == 0
+                            ? 0
+                            : Random.Shared.Next(-rotationRange, rotationRange + 1);
+
+                        svg.Append("<text x=\"").Append(Format(centerX))
+                            .Append("\" y=\"").Append(Format(baseline))
+                            .Append("\" text-anchor=\"middle\"")
+                            .Append(" font-family=\"").Append(family).Append('"')
+                            .Append(" font-size=\"").Append(Format(glyphSize))
+                            .Append("\" font-weight=\"700\" fill=\"")
+                            .Append(noise == CaptchaNoiseLevel.High
+                                ? GlyphColors[Random.Shared.Next(GlyphColors.Length)]
+                                : "#1e293b")
+                            .Append("\"");
+
+                        if (angle != 0)
+                        {
+                            svg.Append(" transform=\"rotate(").Append(angle)
+                                .Append(' ').Append(Format(centerX)).Append(' ')
+                                .Append(Format(baseline - glyphSize / 3))
+                                .Append(")\"");
+                        }
+
+                        svg.Append('>')
+                            .Append(WebUtility.HtmlEncode(text[index].ToString()))
+                            .Append("</text>");
+                    }
+
+                    cursor += glyphWidth;
+                }
             }
 
             if (noise != CaptchaNoiseLevel.None)
@@ -400,6 +584,164 @@ namespace TechUI.Mvc.Captcha
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(svg.ToString()));
         }
 
+        private static void AppendWordLines(
+            StringBuilder svg,
+            string text,
+            CaptchaLanguage language,
+            int width,
+            int height,
+            CaptchaNoiseLevel noise)
+        {
+            var isPersian = language == CaptchaLanguage.Persian;
+
+            var rawWords = text.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries);
+
+            var words = new List<string>(rawWords.Length);
+
+            foreach (var word in rawWords)
+            {
+                if (word == "و" && words.Count > 0)
+                {
+                    words[^1] += " و";
+                }
+                else if (words.Count > 0 &&
+                    (word is "هزار" or "صد" or "hundred" or "thousand"))
+                {
+                    words[^1] += " " + word;
+                }
+                else
+                {
+                    words.Add(word);
+                }
+            }
+
+            var available = Math.Max(width - 24.0, 60.0);
+            List<string>? lines = null;
+            var fontSize = 11;
+
+            for (var size = 22; size >= 11; size--)
+            {
+                var candidate = WrapWords(words, available, size, isPersian);
+
+                if (candidate.Count * size * 1.3 <= height - 8)
+                {
+                    lines = candidate;
+                    fontSize = size;
+                    break;
+                }
+            }
+
+            lines ??= WrapWords(words, available, fontSize, isPersian);
+
+            var lineHeight = fontSize * 1.3;
+            var startY = (height - lines.Count * lineHeight) / 2.0 + fontSize;
+
+            var family = isPersian
+                ? "Tahoma, 'Segoe UI', Arial, sans-serif"
+                : "'Segoe UI', Arial, sans-serif";
+
+            var direction = isPersian ? "rtl" : "ltr";
+
+            var maxRotation = noise switch
+            {
+                CaptchaNoiseLevel.None => 0,
+                CaptchaNoiseLevel.Low => 3,
+                CaptchaNoiseLevel.High => 8,
+                _ => 5
+            };
+
+            for (var index = 0; index < lines.Count; index++)
+            {
+                var centerX = width / 2.0;
+                var baseline = Math.Clamp(
+                    startY + index * lineHeight,
+                    fontSize,
+                    height - 4);
+
+                var angle = maxRotation == 0
+                    ? 0
+                    : Random.Shared.Next(-maxRotation, maxRotation + 1);
+
+                svg.Append("<text x=\"").Append(Format(centerX))
+                    .Append("\" y=\"").Append(Format(baseline))
+                    .Append("\" text-anchor=\"middle\"")
+                    .Append(" direction=\"").Append(direction).Append('"')
+                    .Append(" font-family=\"").Append(family).Append('"')
+                    .Append(" font-size=\"")
+                    .Append(fontSize.ToString(CultureInfo.InvariantCulture))
+                    .Append("\" font-weight=\"700\" fill=\"")
+                    .Append(noise == CaptchaNoiseLevel.High
+                        ? GlyphColors[Random.Shared.Next(GlyphColors.Length)]
+                        : "#1e293b")
+                    .Append("\"");
+
+                if (angle != 0)
+                {
+                    svg.Append(" transform=\"rotate(").Append(angle)
+                        .Append(' ').Append(Format(centerX)).Append(' ')
+                        .Append(Format(baseline - fontSize / 3))
+                        .Append(")\"");
+                }
+
+                svg.Append('>')
+                    .Append(WebUtility.HtmlEncode(lines[index]))
+                    .Append("</text>");
+            }
+        }
+
+        private static List<string> WrapWords(
+            IReadOnlyList<string> words,
+            double maxWidth,
+            int fontSize,
+            bool persian)
+        {
+            var lines = new List<string>(3);
+            var current = new StringBuilder();
+            var currentWidth = 0.0;
+            var spaceWidth = fontSize * 0.32;
+
+            foreach (var word in words)
+            {
+                var wordWidth = EstimateWordWidth(word, fontSize, persian);
+
+                if (current.Length > 0 &&
+                    currentWidth + spaceWidth + wordWidth > maxWidth)
+                {
+                    lines.Add(current.ToString());
+                    current.Clear();
+                    currentWidth = 0;
+                }
+
+                if (current.Length > 0)
+                {
+                    current.Append(' ');
+                    currentWidth += spaceWidth;
+                }
+
+                current.Append(word);
+                currentWidth += wordWidth;
+            }
+
+            if (current.Length > 0)
+            {
+                lines.Add(current.ToString());
+            }
+
+            return lines;
+        }
+
+        private static double EstimateWordWidth(
+            string word,
+            int fontSize,
+            bool persian)
+        {
+            var factor = persian ? 0.54 : 0.55;
+
+            return word.Length * fontSize * factor;
+        }
+
         private static double Jitter(double amount)
         {
             return (Random.Shared.NextDouble() * 2 - 1) * amount;
@@ -416,6 +758,7 @@ namespace TechUI.Mvc.Captcha
             {
                 CaptchaKind.Digits => "digits",
                 CaptchaKind.Math => "math",
+                CaptchaKind.NumberWords => "words",
                 _ => "letters"
             };
         }
@@ -462,6 +805,12 @@ namespace TechUI.Mvc.Captcha
                 }
 
                 if (char.IsWhiteSpace(ch) || ch == '\u200C' || ch == '\u200D')
+                {
+                    continue;
+                }
+
+                if (ch == ',' || ch == '\u060C' || ch == '\u066B' ||
+                    ch == '\u066C' || ch == '\u200E' || ch == '\u200F')
                 {
                     continue;
                 }

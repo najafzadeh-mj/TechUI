@@ -13309,11 +13309,18 @@ Tech.Captcha.get = function (id) {
     return Tech.Captcha.instances.get(id) || null;
 };
 
-Tech.Captcha.refresh = function (id) {
+Tech.Captcha.refresh = function (id, options) {
 
     const instance = Tech.Captcha.get(id);
 
-    return instance ? instance.refresh() : null;
+    return instance ? instance.refresh(options) : null;
+};
+
+Tech.Captcha.setKind = function (id, kind) {
+
+    const instance = Tech.Captcha.get(id);
+
+    return instance ? instance.setKind(kind) : null;
 };
 
 Tech.Captcha.token = function (id) {
@@ -13323,25 +13330,82 @@ Tech.Captcha.token = function (id) {
     return instance ? instance.token() : null;
 };
 
-function techCaptchaParams(root) {
+const techCaptchaKinds = ['letters', 'digits', 'math', 'words'];
+
+function techCaptchaKindName(value) {
+
+    const kind = String(value || '').toLowerCase();
+
+    return techCaptchaKinds.indexOf(kind) >= 0 ? kind : 'letters';
+}
+
+function techCaptchaParams(root, overrides) {
+
+    overrides = overrides || {};
 
     const params = new URLSearchParams();
+    const kind = overrides.kind
+        ? techCaptchaKindName(overrides.kind)
+        : techCaptchaKindName(root.dataset.kind);
 
-    params.set('language', root.dataset.language || 'fa');
-    params.set('kind', root.dataset.kind || 'letters');
+    params.set(
+        'language',
+        overrides.language || root.dataset.language || 'fa');
+    params.set('kind', kind);
 
-    if (root.dataset.noise) {
-        params.set('noise', root.dataset.noise);
+    const noise = overrides.noise || root.dataset.noise;
+
+    if (noise) {
+        params.set('noise', noise);
     }
 
-    if (root.dataset.kind === 'math') {
-        params.set('operation', root.dataset.operation || 'addition');
+    if (kind === 'math') {
+        params.set(
+            'operation',
+            overrides.operation || root.dataset.operation || 'addition');
     }
-    else if (root.dataset.length) {
-        params.set('length', root.dataset.length);
+    else {
+        const length = overrides.length !== undefined &&
+            overrides.length !== null
+            ? overrides.length
+            : root.dataset.length;
+
+        if (length) {
+            params.set('length', length);
+        }
     }
 
     return params;
+}
+
+function techCaptchaApplyKind(root, kind) {
+
+    const input = root.querySelector('.tech-captcha-answer');
+
+    if (!input) return;
+
+    const isEnglish = (root.dataset.language || 'fa') === 'en';
+    const normalized = techCaptchaKindName(kind);
+    const numeric = normalized !== 'letters';
+
+    if (numeric) {
+        input.setAttribute('inputmode', 'numeric');
+        input.setAttribute('dir', 'ltr');
+    }
+    else {
+        input.removeAttribute('inputmode');
+        input.removeAttribute('dir');
+    }
+
+    input.placeholder = normalized === 'math'
+        ? (isEnglish ? 'Enter the sum' : 'حاصل جمع را وارد کنید')
+        : normalized === 'words'
+            ? (isEnglish
+                ? 'Type the number'
+                : 'عدد نوشته‌شده را وارد کنید')
+            : (isEnglish
+                ? 'Enter the security code'
+                : 'کد امنیتی را وارد کنید');
 }
 
 function techCaptchaClearError(root, input) {
@@ -13356,7 +13420,9 @@ function techCaptchaClearError(root, input) {
     if (error) error.hidden = true;
 }
 
-function techCaptchaRefresh(root) {
+function techCaptchaRefresh(root, options) {
+
+    options = options || {};
 
     const input = root.querySelector('.tech-captcha-answer');
     const hidden = root.querySelector('input[type="hidden"]');
@@ -13367,11 +13433,25 @@ function techCaptchaRefresh(root) {
 
     if (!hidden || !image) return Promise.resolve(null);
 
+    if (options.kind) {
+        root.dataset.kind = techCaptchaKindName(options.kind);
+        techCaptchaApplyKind(root, root.dataset.kind);
+    }
+
+    if (options.language) {
+        root.dataset.language = options.language === 'en' ? 'en' : 'fa';
+        techCaptchaApplyKind(root, root.dataset.kind);
+    }
+
+    if (options.length !== undefined && options.length !== null) {
+        root.dataset.length = String(options.length);
+    }
+
     if (button) button.disabled = true;
 
     root.classList.add('is-loading');
 
-    return fetch(url + separator + techCaptchaParams(root).toString(), {
+    return fetch(url + separator + techCaptchaParams(root, options).toString(), {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
     })
@@ -13440,7 +13520,24 @@ function initCaptcha(root) {
         element: root,
         answer: function () { return input.value; },
         token: function () { return hidden.value; },
-        refresh: function () { return techCaptchaRefresh(root); }
+        kind: function () { return techCaptchaKindName(root.dataset.kind); },
+        setKind: function (kind) {
+            const normalized = String(kind || '').toLowerCase();
+
+            if (techCaptchaKinds.indexOf(normalized) < 0) {
+                return Promise.resolve(null);
+            }
+
+            if (normalized !== 'math' &&
+                techCaptchaKindName(root.dataset.kind) !== normalized) {
+                root.dataset.length = normalized === 'words' ? '4' : '5';
+            }
+
+            return techCaptchaRefresh(root, { kind: normalized });
+        },
+        refresh: function (options) {
+            return techCaptchaRefresh(root, options);
+        }
     });
 }
 

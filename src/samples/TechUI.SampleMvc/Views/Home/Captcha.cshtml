@@ -16,9 +16,10 @@
     انقضا است و در hidden input کنار فیلد قرار می‌گیرد؛ بنابراین اعتبارسنجی بدون
     Session و با
     <code>Request.ValidateTechCaptchaAsync(...)</code>
-    انجام می‌شود. زبان (فارسی/انگلیسی)، نوع (حروف/عدد/محاسبه)، عملگر
+    انجام می‌شود. زبان (فارسی/انگلیسی)، نوع (حروف/عدد/محاسبه/عدد با حروف)، عملگر
     (جمع/تفریق/ضرب) و میزان نویز تصویر (بدون/کم/متوسط/زیاد) هنگام تعریف
-    کامپوننت انتخاب می‌شوند.
+    کامپوننت انتخاب می‌شوند. در نوع «عدد با حروف» تصویر عدد را به‌صورت نوشتاری
+    نشان می‌دهد (مثلاً «چهار هزار و سیصد و پنجاه و دو») و پاسخ باید رقم باشد.
 </p>
 
 @if (ViewBag.Success == true)
@@ -69,6 +70,35 @@
                 @(Html.Tech().Captcha("EnglishDigits")
                     .Language(CaptchaLanguage.English)
                     .Kind(CaptchaKind.Digits)
+                    .Length(4))
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label">فارسی، عدد با حروف</label>
+                @(Html.Tech().Captcha("PersianWords")
+                    .Language(CaptchaLanguage.Persian)
+                    .Kind(CaptchaKind.NumberWords)
+                    .Length(4))
+                <div class="form-text">
+                    عدد را به رقم وارد کنید؛ جداکننده‌هایی مثل «٬» یا «,»
+                    نادیده گرفته می‌شوند.
+                </div>
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label class="form-label" for="kindSelect">
+                    نوع چالش قابل انتخاب (فارسی)
+                </label>
+                <select id="kindSelect" class="form-select mb-2"
+                        aria-label="نوع چالش کپچا">
+                    <option value="letters">حروف</option>
+                    <option value="digits">عدد</option>
+                    <option value="math">محاسبه</option>
+                    <option value="words" selected>عدد با حروف</option>
+                </select>
+                @(Html.Tech().Captcha("SelectableKind")
+                    .Language(CaptchaLanguage.Persian)
+                    .Kind(CaptchaKind.NumberWords)
                     .Length(4))
             </div>
 
@@ -132,6 +162,14 @@
         <div class="small mb-2">
             <code>Tech.Captcha.token('Captcha')</code> — توکن فعلی فرم
         </div>
+        <div class="small mb-2">
+            <code>Tech.Captcha.setKind('Captcha', 'words')</code> — تغییر نوع
+            چالش و دریافت تصویر جدید
+        </div>
+        <div class="small mb-2">
+            <code>Tech.Captcha.refresh('Captcha', { length: 5 })</code> —
+            بازخوانی با گزینه‌های موقت
+        </div>
         <div class="small">
             <code>Tech.Captcha.get('Captcha')</code> — دسترسی به instance
         </div>
@@ -151,14 +189,24 @@
     <script>
         document.getElementById('refreshAll').addEventListener('click', function () {
 
-            ['Captcha', 'EnglishLetters', 'EnglishDigits',
-                'MathAddition', 'MathSubtraction', 'MathMultiplication',
-                'NoiseHigh', 'NoiseNone']
+            ['Captcha', 'EnglishLetters', 'EnglishDigits', 'PersianWords',
+                'SelectableKind', 'MathAddition', 'MathSubtraction',
+                'MathMultiplication', 'NoiseHigh', 'NoiseNone']
                 .forEach(function (id) {
                     Tech.Captcha.refresh(id);
                 });
 
             Tech.notify('تصویر کپچاها تازه شد.', { type: 'success' });
+        });
+
+        document.getElementById('kindSelect').addEventListener('change', function () {
+
+            Tech.Captcha.setKind('SelectableKind', this.value).then(function (data) {
+
+                if (data) {
+                    Tech.notify('نوع چالش تغییر کرد.', { type: 'success' });
+                }
+            });
         });
 
         document.getElementById('readToken').addEventListener('click', function () {

@@ -10,13 +10,15 @@ namespace TechUI.Mvc.Captcha
     }
 
     /// <summary>
-    /// Challenge style: random letters, random digits or an arithmetic question.
+    /// Challenge style: random letters, random digits, an arithmetic question,
+    /// or a number written in words that must be typed as digits.
     /// </summary>
     public enum CaptchaKind
     {
         Letters,
         Digits,
-        Math
+        Math,
+        NumberWords
     }
 
     /// <summary>
@@ -75,7 +77,11 @@ namespace TechUI.Mvc.Captcha
         public CaptchaMathOperation Operation { get; set; } =
             CaptchaMathOperation.Addition;
 
-        /// <summary>Letter/digit count; clamped to 3..8. Ignored for math.</summary>
+        /// <summary>
+        /// Letter/digit count; clamped to 3..8. For
+        /// <see cref="CaptchaKind.NumberWords"/> it is the number of digits
+        /// (clamped to 2..5, default 4). Ignored for math.
+        /// </summary>
         public int Length { get; set; }
 
         /// <summary>Overrides <see cref="TechCaptchaOptions.Noise"/> when set.</summary>
