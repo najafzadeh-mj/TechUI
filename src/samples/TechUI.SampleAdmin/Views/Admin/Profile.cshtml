@@ -1,0 +1,143 @@
+@model AdminProfile
+@{
+    ViewData["Title"] = "پروفایل من";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h2 class="h5 mb-1">پروفایل من</h2>
+        <p class="text-muted small mb-0">
+            همین داده‌ها در نوار بالای پنل و پنل کشویی کاربر نمایش داده می‌شوند و
+            در فایل <code dir="ltr">App_Data/profile.json</code> ذخیره می‌شوند.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Index">
+        <i class="bi bi-arrow-right"></i>
+        بازگشت به داشبورد
+    </a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="admin-card p-4 text-center h-100">
+            <span class="admin-avatar admin-avatar-xl mx-auto">@Model.AvatarLetter</span>
+            <h3 class="h5 mt-3 mb-1">@Model.FullName</h3>
+            <div class="text-muted small">@Model.RoleTitle</div>
+
+            <hr />
+
+            <div class="d-flex flex-column gap-2 small text-start">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-envelope text-primary"></i>
+                    <span dir="ltr">@Model.Email</span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.Phone))
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-telephone text-primary"></i>
+                        <span dir="ltr">@Model.Phone</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Model.City))
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-geo-alt text-primary"></i>
+                        <span>@Model.City</span>
+                    </div>
+                }
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Bio))
+            {
+                <div class="alert alert-light small text-start mt-3 mb-0">
+                    @Model.Bio
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <form asp-controller="Admin" asp-action="Profile" method="post"
+              class="admin-card form-card p-4" novalidate>
+            @Html.AntiForgeryToken()
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    لطفاً خطاهای مشخص‌شده را برطرف کنید.
+                </div>
+            }
+
+            <div class="form-grid">
+                <div>
+                    <label class="form-label" for="FullName">نام و نام خانوادگی</label>
+                    @(Html.Tech().TextBoxFor<AdminProfile, string>(m => m.FullName)
+                        .PrefixIcon("person")
+                        .MaxLength(80)
+                        .Clearable())
+                </div>
+
+                <div>
+                    <label class="form-label" for="RoleTitle">عنوان نقش</label>
+                    @(Html.Tech().TextBoxFor<AdminProfile, string>(m => m.RoleTitle)
+                        .PrefixIcon("award")
+                        .MaxLength(60))
+                </div>
+
+                <div>
+                    <label class="form-label" for="Email">ایمیل</label>
+                    @(Html.Tech().TextBoxFor<AdminProfile, string>(m => m.Email)
+                        .Type("email")
+                        .PrefixIcon("envelope")
+                        .InputMode("email"))
+                </div>
+
+                <div>
+                    <label class="form-label" for="Phone">شماره تماس</label>
+                    @(Html.Tech().TextBoxFor<AdminProfile, string?>(m => m.Phone)
+                        .PrefixIcon("phone")
+                        .InputMode("tel")
+                        .MaxLength(20))
+                </div>
+
+                <div>
+                    <label class="form-label" for="City">شهر</label>
+                    <select asp-for="City" class="form-select">
+                        <option value="">انتخاب شهر</option>
+                        <option value="تهران">تهران</option>
+                        <option value="مشهد">مشهد</option>
+                        <option value="اصفهان">اصفهان</option>
+                        <option value="شیراز">شیراز</option>
+                        <option value="تبریز">تبریز</option>
+                        <option value="کرج">کرج</option>
+                        <option value="اهواز">اهواز</option>
+                        <option value="قم">قم</option>
+                    </select>
+                </div>
+
+                <div class="span-2">
+                    <label class="form-label" for="Bio">دربارهٔ من</label>
+                    @(Html.Tech().TextAreaFor<AdminProfile, string?>(m => m.Bio)
+                        .Rows(4)
+                        .AutoGrow()
+                        .MaxLength(400)
+                        .ShowCounter()
+                        .Placeholder("معرفی کوتاه برای نمایش در پروفایل..."))
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <a class="btn btn-outline-secondary" asp-controller="Admin" asp-action="Index">
+                    انصراف
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check2"></i>
+                    ذخیره پروفایل
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

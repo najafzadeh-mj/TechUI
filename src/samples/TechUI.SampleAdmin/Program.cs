@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TechUI.Mvc.Captcha;
 using TechUI.SampleAdmin.Data;
 using TechUI.SampleAdmin.Services;
 
@@ -17,6 +18,15 @@ builder.Services.AddDbContext<AdminDbContext>(options =>
         ?? "Data Source=App_Data/techui-admin.db"));
 
 builder.Services.AddSingleton<SettingsService>();
+builder.Services.AddSingleton<ProfileService>();
+
+// Captcha tokens are encrypted with this secret. The sample falls back to a
+// random per-process secret, so restarting the app invalidates open challenges.
+builder.Services.AddTechUICaptcha(options =>
+{
+    options.Secret = builder.Configuration["TechUI:Captcha:Secret"] ?? "";
+    options.ExpiresIn = TimeSpan.FromMinutes(10);
+});
 
 var app = builder.Build();
 
@@ -37,6 +47,7 @@ app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAuthorization();
 app.MapStaticAssets();
+app.MapTechUICaptcha();
 
 app.MapControllerRoute(
     name: "default",

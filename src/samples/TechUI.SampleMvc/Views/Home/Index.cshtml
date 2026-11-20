@@ -155,6 +155,116 @@
 
 </div>
 
+<h2 class="h5 mt-4">چیدمان دو سطری (عنوان + ستون‌ها)</h2>
+<p class="text-muted small">
+    هر رکورد در دو سطر رندر می‌شود: ستون اول در سطر عنوان و هفت ستون دیگر
+    در سطر دوم. عرض سلول عنوان از <code>.Width()</code> همان ستون می‌آید.
+</p>
+
+<div dir="rtl">
+    @(Html.Tech().Grid<UserViewModel>()
+        .Name("stackedGrid")
+        .DataSource(ds => ds.Read("GridData", "Home")
+            .Type(TechHttpMethod.Post))
+        .Pageable()
+        .PageSize(6)
+        .MultiSelect()
+        .StackedRows()
+        .AriaLabel("جدول کاربران با چیدمان دو سطری")
+        .Columns(c =>
+        {
+            c.Bound(x => x.FullName)
+            .Title("نام کامل")
+            .Width(240);
+
+            c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(90);
+
+            c.Bound(x => x.IsActive)
+            .Title("فعال")
+            .Width(80);
+
+            c.Template(@"
+        {{ for (const r of Roles) { }}
+        <span class='badge bg-info me-1'>{{= r }}</span>
+        {{ } }}
+        ")
+            .Title("نقش‌ها");
+
+            c.Template(@"
+        {{ if (IsActive) { }}
+        <span class='badge bg-success'>فعال</span>
+        {{ } else { }}
+        <span class='badge bg-danger'>غیرفعال</span>
+        {{ } }}
+        ")
+            .Title("وضعیت");
+
+            c.Template(@"
+        {{= badge(Id % 2 === 0 ? 'زوج' : 'فرد',
+        Id % 2 === 0 ? 'success' : 'secondary') }}
+        ")
+            .Title("نوع")
+            .Width(110);
+
+            c.Template(@"
+        {{= formatNumber(Id * 12500) }} تومان
+        ")
+            .Title("مبلغ")
+            .Width(140);
+
+            c.Template(@"
+        {{= upper(FullName) }}
+        ")
+            .Title("نام لاتین");
+        }))
+</div>
+
+<h2 class="h5 mt-4">چیدمان دو سطری با سه ستون عنوان</h2>
+<p class="text-muted small">
+    با <code>.StackedRows(3)</code> سه ستون اول هر کدام یک سلول در سطر عنوان
+    دارند و عرض هر سلول همان <code>.Width()</code> ستون است؛ ستون‌های بعدی
+    در سطر دوم قرار می‌گیرند.
+</p>
+
+<div dir="rtl">
+    @(Html.Tech().Grid<UserViewModel>()
+        .Name("stackedTitlesGrid")
+        .DataSource(ds => ds.Read("GridData", "Home")
+            .Type(TechHttpMethod.Post))
+        .Pageable()
+        .PageSize(4)
+        .StackedRows(3)
+        .AriaLabel("جدول کاربران با سه ستون عنوان")
+        .Columns(c =>
+        {
+            c.Bound(x => x.FullName)
+            .Title("نام کامل")
+            .Width(260);
+
+            c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(90);
+
+            c.Bound(x => x.IsActive)
+            .Title("فعال")
+            .Width(80);
+
+            c.Template(@"
+        {{ for (const r of Roles) { }}
+        <span class='badge bg-info me-1'>{{= r }}</span>
+        {{ } }}
+        ")
+            .Title("نقش‌ها");
+
+            c.Template(@"
+        {{= formatNumber(Id * 12500) }} تومان
+        ")
+            .Title("مبلغ");
+        }))
+</div>
+
 <script>
 
     function searchGrid() {

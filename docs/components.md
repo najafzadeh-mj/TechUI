@@ -166,6 +166,8 @@ DataAnnotations را به‌صورت خودکار اعمال می‌کنند.
 | `PageSize(int)` | اندازه‌ی صفحه‌ی اولیه |
 | `PageSizeSelector()` / `PageSizes(params int[])` | انتخابگر اندازه‌ی صفحه؛ `PageSizes` انتخابگر را خودکار فعال می‌کند |
 | `InfiniteScroll(bool = true)` | جایگزینی صفحه‌بند با بارگذاری تدریجی؛ `PageSize` اندازه‌ی هر بخش است |
+| `StackedRows(bool = true)` | هر رکورد در دو سطر: ستون اول در سطر عنوان، ستون‌های دیگر در سطر دوم |
+| `StackedRows(int titleColumns)` | همان حالت با تعیین تعداد ستون‌های سطر عنوان؛ عرض هر سلول از `Width()` ستون می‌آید |
 | `DataSource(Action<GridDataSourceBuilder>)` | `Read(action, controller, area?)`, `Url(url)`, `Data(functionName)`, `Type(TechHttpMethod)` |
 | `Events(Action<GridEventBuilder>)` | `DataBinding`, `DataBound`, `Change`, `RowClick`, `RowDoubleClick`, `GroupToggle`, `Error` |
 | `Toolbar(Action<GridToolbarBuilder>)` | `Create(text?, handler?, icon?)`, `Refresh(text?, icon?)`, `ColumnChooser(text?, icon?)`, `Export(text?, icon?, fileName?)`, `Custom(text, handler, icon?)` |
@@ -437,6 +439,53 @@ const grid = Tech.Grid.get('usersGrid');
 grid.hasMore();              // آیا بخش دیگری مانده؟
 await grid.loadMore();       // بارگذاری دستی بخش بعد
 ```
+
+### چیدمان دو سطری (`StackedRows`)
+
+با `.StackedRows()` هر رکورد در دو سطر جدول نمایش داده می‌شود: ستون نمایان
+اول در سطر عنوان و بقیه‌ی ستون‌ها در سطر دوم. سلول عنوان در همان ستون جدول
+می‌ماند، بنابراین عرضش را `.Width()` همان ستون تعیین می‌کند و یک سلول خالی
+(`colspan`) باقی عرض سطر را پر می‌کند. برای رکوردهای ۸ ستونه که ستون اول
+عنوان آن‌هاست مناسب است.
+
+```razor
+@(Html.Tech().Grid<UserViewModel>()
+    .Name("users")
+    .StackedRows()
+    .MultiSelect()
+    .Columns(c =>
+    {
+        c.Bound(x => x.FullName).Title("نام کامل");    // سطر عنوان
+        c.Bound(x => x.Id).Title("شناسه");             // سطر ستون‌ها
+        c.Bound(x => x.IsActive).Title("فعال");
+        // ...
+    }))
+```
+
+با `.StackedRows(3)` سه ستون نمایان اول در سطر عنوان قرار می‌گیرند، هر کدام
+با عرض `.Width()` خودش، و ستون‌های بعدی در سطر دوم می‌آیند:
+
+```razor
+.StackedRows(3)
+```
+
+- عرض هر سلول سطر عنوان همان عرض ستون جدول است. برای تعیین آن روی همان
+  ستون `.Width(...)` بگذارید؛ اگر تعیین نشود، عرض خودکار جدول اعمال می‌شود.
+- ستون «نمایان» اول تعیین می‌شود؛ اگر آن را با `ColumnChooser` مخفی کنید،
+  ستون نمایان بعدی عنوان می‌شود.
+- اگر تعداد ستون‌های نمایان از `titleColumns` بیشتر نباشد، ردیف‌ها به‌صورت
+  معمولی (یک سطر) رندر می‌شوند تا داده‌ای از دست نرود.
+- چک‌باکس انتخاب چندگانه در سطر عنوان قرار می‌گیرد و کلیک/انتخاب روی هر
+  دو سطر، همان رکورد را هدف می‌گیرد (`RowClick.index` همان شماره‌ی رکورد
+  است). `aria-selected` و هایلایت روی هر دو سطر اعمال می‌شود.
+- خروجی CSV یک سطر برای هر رکورد می‌دهد، نه دو سطر.
+- `aria-rowcount` در این حالت تعداد سطرهای فیزیکی جدول (دو برابر تعداد
+  رکوردها) را نشان می‌دهد.
+- فیلتر، مرتب‌سازی، گروه‌بندی، خروجی و بارگذاری بی‌نهایت بدون تغییر کار
+  می‌کنند.
+- سلول‌های سطر عنوان سنجاق نمی‌شوند و هنگام اسکرول افقی زیر ستون‌های
+  سنجاق‌شده می‌روند؛ اگر عنوان باید همیشه دیده شود، ستون اول را سنجاق
+  نکنید.
 
 ### ناوبری کیبورد سلولی
 

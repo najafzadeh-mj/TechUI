@@ -191,6 +191,38 @@
 }
 
 /* =========================================================
+   Stacked rows (title row + details row)
+   ========================================================= */
+
+.tech-grid-table-stacked .tech-stacked-title-row > td {
+    font-weight: 600;
+    padding-bottom: .25rem;
+}
+
+.tech-grid-table-stacked .tech-stacked-title-cell,
+.tech-grid-table-stacked .tech-stacked-title-fill {
+    border-bottom-color: transparent;
+}
+
+.tech-grid-table-stacked .tech-stacked-title-cell + .tech-stacked-title-cell {
+    border-inline-start: 1px solid var(--tech-border);
+}
+
+.tech-grid-table-stacked .tech-stacked-detail-row > td {
+    padding-top: .25rem;
+    border-top-color: transparent;
+}
+
+.tech-grid-table-stacked tbody tr.tech-stacked-title-row:hover + tr.tech-stacked-detail-row td,
+.tech-grid-table-stacked tbody tr.tech-stacked-detail-row:hover td {
+    background: var(--tech-hover);
+}
+
+.tech-grid-table-stacked tbody tr.tech-stacked-title-row:has(+ tr.tech-stacked-detail-row:hover) td {
+    background: var(--tech-hover);
+}
+
+/* =========================================================
    Pinned columns
    ========================================================= */
 

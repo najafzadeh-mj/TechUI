@@ -729,6 +729,9 @@ Tech.register('grid', function (el) {
     const resizableEnabled = (el.dataset.resizable || 'false') === 'true';
     const reorderableEnabled = (el.dataset.reorderable || 'false') === 'true';
     const infiniteEnabled = (el.dataset.infiniteScroll || 'false') === 'true';
+    const stackedRowsEnabled = (el.dataset.stackedRows || 'false') === 'true';
+    const stackedTitleColumns = Math.max(
+        1, parseInt(el.dataset.stackedTitleColumns || '1', 10) || 1);
 
     const infiniteThreshold = 160;
 
@@ -1638,6 +1641,13 @@ Tech.register('grid', function (el) {
             ? ` aria-selected="${isSelected}"`
             : '';
 
+        if (stackedRowsEnabled && visible.length > stackedTitleColumns) {
+
+            return buildStackedRowHtml(row, rowIndex, visible,
+                selectableClass, selectedClass, highlightClass,
+                selectableAttrs, multiSelected);
+        }
+
         let html = `<tr class="tech-grid-row${selectableClass}${selectedClass}${highlightClass}" ` +
             `data-row-index="${rowIndex}"${selectableAttrs}>`;
 
@@ -1675,6 +1685,94 @@ Tech.register('grid', function (el) {
                 html += '<td' + cellAttrs + '>' +
                     Tech.escapeHtml(getValue(row, column.field)) + '</td>';
             }
+        });
+
+        return html + '</tr>';
+    }
+
+    function buildStackedRowHtml(
+        row, rowIndex, visible,
+        selectableClass, selectedClass, highlightClass,
+        selectableAttrs, multiSelected) {
+
+        const titleCount = Math.min(
+            stackedTitleColumns, Math.max(1, visible.length - 1));
+
+        const titleColumns = visible.slice(0, titleCount);
+        const detailColumns = visible.slice(titleCount);
+
+        const recordClass = 'tech-grid-row' +
+            selectableClass + selectedClass + highlightClass;
+
+        let html = `<tr class="${recordClass} tech-stacked-title-row" ` +
+            `data-row-index="${rowIndex}"${selectableAttrs}>`;
+
+        if (multiSelectEnabled) {
+
+            const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
+
+            html +=
+                `<td class="tech-grid-select-col${pinnedClass}">` +
+                `<input type="checkbox" class="tech-grid-row-check" data-index="${rowIndex}" ` +
+                `aria-label="انتخاب سطر ${rowIndex + 1}" ${multiSelected ? 'checked' : ''}>` +
+                '</td>';
+        }
+
+        // Each title cell stays in its own table column, so column Width()
+        // controls its width; one filler cell completes the row width.
+        titleColumns.forEach(function (column, index) {
+
+            const tabIndex = rowIndex === 0 && index === 0 ? '0' : '-1';
+
+            const cellHtml = column.isTemplate
+                ? applyTemplate(column.template, row)
+                : Tech.escapeHtml(getValue(row, column.field));
+
+            html +=
+                `<td class="tech-stacked-title-cell" ` +
+                `data-key="${Tech.escapeHtml(column.key)}" ` +
+                `tabindex="${tabIndex}">` +
+                cellHtml + '</td>';
+        });
+
+        const fillSpan = visible.length - titleCount;
+
+        if (fillSpan > 0) {
+            html += `<td class="tech-stacked-title-fill" ` +
+                `colspan="${fillSpan}" aria-hidden="true"></td>`;
+        }
+
+        html += '</tr>';
+
+        html += `<tr class="${recordClass} tech-stacked-detail-row" ` +
+            `data-row-index="${rowIndex}"${selectableAttrs}>`;
+
+        if (multiSelectEnabled) {
+
+            const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
+
+            html += `<td class="tech-grid-select-col tech-stacked-spacer${pinnedClass}" ` +
+                'aria-hidden="true"></td>';
+        }
+
+        for (let index = 0; index < titleCount; index++) {
+            html += '<td class="tech-stacked-spacer" aria-hidden="true"></td>';
+        }
+
+        detailColumns.forEach(function (column) {
+
+            const pinnedClass = column.pinned ? ' class="tech-col-pinned"' : '';
+
+            const cellAttrs =
+                ` data-key="${Tech.escapeHtml(column.key)}"` +
+                pinnedClass +
+                ' tabindex="-1"';
+
+            html += '<td' + cellAttrs + '>' +
+                (column.isTemplate
+                    ? applyTemplate(column.template, row)
+                    : Tech.escapeHtml(getValue(row, column.field))) +
+                '</td>';
         });
 
         return html + '</tr>';
@@ -2834,7 +2932,8 @@ Tech.register('grid', function (el) {
             : '';
 
         const tableClass = 'table table-striped table-hover mb-0' +
-            (resizableEnabled ? ' tech-grid-table-fixed' : '');
+            (resizableEnabled ? ' tech-grid-table-fixed' : '') +
+            (stackedRowsEnabled ? ' tech-grid-table-stacked' : '');
 
         const previousBody = el.querySelector('.tech-grid-body');
 
@@ -2843,6 +2942,9 @@ Tech.register('grid', function (el) {
 
         const columnCount = visibleColumns().length +
             (multiSelectEnabled ? 1 : 0);
+
+        const ariaRowCount = lastResult.rowTotal *
+            (stackedRowsEnabled ? 2 : 1);
 
         const activeElement = document.activeElement;
 
@@ -2871,7 +2973,7 @@ Tech.register('grid', function (el) {
             buildFilterBarHtml() +
             `<div class="tech-grid-body table-responsive" ${bodyStyle}>` +
             `<table class="${tableClass}" aria-label="${Tech.escapeHtml(gridLabel)}" ` +
-            `aria-rowcount="${lastResult.rowTotal}" aria-colcount="${columnCount}">` +
+            `aria-rowcount="${ariaRowCount}" aria-colcount="${columnCount}">` +
             buildHeaderHtml() +
             buildBodyHtml() +
             buildFooterHtml() +
@@ -2918,21 +3020,28 @@ Tech.register('grid', function (el) {
         }
         else if (focusState) {
 
-            const rows = getNavRows();
-
-            const row = rows.find(function (item) {
+            const rows = getNavRows().filter(function (item) {
                 return parseInt(item.dataset.rowIndex, 10) === focusState.rowIndex;
             });
 
-            const cells = getNavCells(row);
+            let cell = null;
 
-            const cell = cells.find(function (item) {
-                return item.dataset.key === focusState.key;
-            }) || cells[0];
+            rows.some(function (item) {
+
+                cell = getNavCells(item).find(function (item) {
+                    return item.dataset.key === focusState.key;
+                }) || null;
+
+                return cell !== null;
+            });
+
+            if (!cell && rows.length > 0) {
+                cell = getNavCells(rows[0])[0] || null;
+            }
 
             if (cell) {
 
-                cells.forEach(function (item) {
+                el.querySelectorAll('td[data-key][tabindex="0"]').forEach(function (item) {
                     item.setAttribute('tabindex', '-1');
                 });
 
@@ -3000,15 +3109,16 @@ Tech.register('grid', function (el) {
         el.querySelectorAll('.tech-grid-row-check').forEach(function (input) {
 
             const index = parseInt(input.dataset.index, 10);
-            const checked = state.selectedIndices.has(index);
 
-            input.checked = checked;
+            input.checked = state.selectedIndices.has(index);
+        });
 
-            const row = input.closest('.tech-grid-row');
+        el.querySelectorAll('.tech-grid-row[data-row-index]').forEach(function (row) {
 
-            if (!row) return;
+            const index = parseInt(row.dataset.rowIndex, 10);
 
-            const isSelected = checked || index === state.selectedIndex;
+            const isSelected = state.selectedIndex === index ||
+                state.selectedIndices.has(index);
 
             row.classList.toggle('tech-row-selected', isSelected);
             row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
@@ -3037,7 +3147,9 @@ Tech.register('grid', function (el) {
 
     function selectRow(row) {
 
-        state.selectedIndex = parseInt(row.dataset.rowIndex, 10);
+        const index = parseInt(row.dataset.rowIndex, 10);
+
+        state.selectedIndex = index;
 
         if (multiSelectEnabled) state.selectedIndices.clear();
 
@@ -3047,8 +3159,12 @@ Tech.register('grid', function (el) {
             item.setAttribute('aria-selected', 'false');
         });
 
-        row.classList.add('tech-row-selected');
-        row.setAttribute('aria-selected', 'true');
+        el.querySelectorAll('.tech-grid-row[data-row-index="' + index + '"]')
+            .forEach(function (item) {
+
+                item.classList.add('tech-row-selected');
+                item.setAttribute('aria-selected', 'true');
+            });
 
         if (multiSelectEnabled) syncSelectionUi();
         else triggerGridEvent('Change', selectionPayload());
@@ -3117,12 +3233,14 @@ Tech.register('grid', function (el) {
         const row = cell.closest('tr');
         const rows = getNavRows();
         const rowIndex = rows.indexOf(row);
+        const recordIndex = parseInt(row.dataset.rowIndex, 10);
         const cells = getNavCells(row);
         const columnIndex = cells.indexOf(cell);
 
         if (rowIndex < 0 || columnIndex < 0) return;
 
         const rtl = getComputedStyle(el).direction === 'rtl';
+        const pageStep = 10 * (stackedRowsEnabled ? 2 : 1);
 
         let targetRow = rowIndex;
         let targetColumn = columnIndex;
@@ -3156,19 +3274,19 @@ Tech.register('grid', function (el) {
                 break;
 
             case 'PageDown':
-                targetRow = rowIndex + 10;
+                targetRow = rowIndex + pageStep;
                 break;
 
             case 'PageUp':
-                targetRow = rowIndex - 10;
+                targetRow = rowIndex - pageStep;
                 break;
 
             case 'Enter':
                 triggerGridEvent('RowClick', {
                     sender: api,
-                    index: rowIndex,
-                    row: currentRows[rowIndex] || null,
-                    data: currentRows[rowIndex] || null
+                    index: recordIndex,
+                    row: currentRows[recordIndex] || null,
+                    data: currentRows[recordIndex] || null
                 });
                 ev.preventDefault();
                 return;
@@ -3180,7 +3298,7 @@ Tech.register('grid', function (el) {
 
                 if (multiSelectEnabled) {
                     toggleRowSelection(
-                        rowIndex, !state.selectedIndices.has(rowIndex));
+                        recordIndex, !state.selectedIndices.has(recordIndex));
                 }
                 else {
                     selectRow(row);
@@ -4700,13 +4818,33 @@ Tech.register('grid', function (el) {
             }).join(',')
         ];
 
+        const recordCells = new Map();
+
         el.querySelectorAll('.tech-grid-body tbody tr[data-row-index]')
             .forEach(function (row) {
 
-                const cells = row.querySelectorAll('td[data-key]');
+                const index = parseInt(row.dataset.rowIndex, 10);
 
-                lines.push(Array.from(cells).map(function (cell) {
-                    return csvEscape(cell.textContent);
+                if (!recordCells.has(index)) recordCells.set(index, new Map());
+
+                const cells = recordCells.get(index);
+
+                row.querySelectorAll('td[data-key]').forEach(function (cell) {
+                    cells.set(cell.dataset.key, cell);
+                });
+            });
+
+        Array.from(recordCells.keys())
+            .sort(function (a, b) { return a - b; })
+            .forEach(function (index) {
+
+                const cells = recordCells.get(index);
+
+                lines.push(visible.map(function (column) {
+
+                    const cell = cells.get(column.key);
+
+                    return csvEscape(cell ? cell.textContent : '');
                 }).join(','));
             });
 

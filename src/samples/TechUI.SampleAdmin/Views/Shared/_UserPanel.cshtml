@@ -1,0 +1,81 @@
+@model AdminProfile
+
+<div class="admin-panel-backdrop" id="adminUserPanelBackdrop"></div>
+
+<aside class="admin-user-panel" id="adminUserPanel"
+       aria-label="پنل کاربری" aria-hidden="true">
+    <header class="admin-user-panel-header">
+        <div>
+            <span class="admin-section-title d-block mb-1">پنل کاربری</span>
+            <h2 class="admin-user-panel-title">حساب مدیر</h2>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-circle"
+                id="adminUserPanelClose" aria-label="بستن پنل">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </header>
+
+    <div class="admin-user-panel-profile">
+        <span class="admin-avatar admin-avatar-xl">@Model.AvatarLetter</span>
+        <div>
+            <strong>@Model.FullName</strong>
+            <small>@Model.RoleTitle</small>
+        </div>
+    </div>
+
+    <ul class="admin-user-panel-meta">
+        <li>
+            <i class="bi bi-envelope"></i>
+            <span dir="ltr">@Model.Email</span>
+        </li>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Phone))
+        {
+            <li>
+                <i class="bi bi-telephone"></i>
+                <span dir="ltr">@Model.Phone</span>
+            </li>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.City))
+        {
+            <li>
+                <i class="bi bi-geo-alt"></i>
+                <span>@Model.City</span>
+            </li>
+        }
+    </ul>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Bio))
+    {
+        <p class="admin-user-panel-bio">@Model.Bio</p>
+    }
+
+    <nav class="admin-user-panel-links" aria-label="میان‌بُرهای حساب">
+        <a asp-controller="Admin" asp-action="Profile">
+            <i class="bi bi-person-vcard"></i>
+            <span>پروفایل من</span>
+            <i class="bi bi-chevron-left ms-auto"></i>
+        </a>
+        <a asp-controller="Admin" asp-action="Settings">
+            <i class="bi bi-gear"></i>
+            <span>تنظیمات فروشگاه</span>
+            <i class="bi bi-chevron-left ms-auto"></i>
+        </a>
+        <a asp-controller="Admin" asp-action="Customers">
+            <i class="bi bi-people"></i>
+            <span>مشتریان</span>
+            <i class="bi bi-chevron-left ms-auto"></i>
+        </a>
+        <a asp-controller="Admin" asp-action="Index">
+            <i class="bi bi-speedometer2"></i>
+            <span>داشبورد</span>
+            <i class="bi bi-chevron-left ms-auto"></i>
+        </a>
+    </nav>
+
+    <div class="admin-user-panel-footer mt-auto">
+        <span class="badge rounded-pill text-bg-primary">نسخه ۱.۰</span>
+        <small>TechUI.SampleAdmin</small>
+    </div>
+</aside>

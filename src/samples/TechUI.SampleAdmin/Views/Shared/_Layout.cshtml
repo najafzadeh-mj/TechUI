@@ -1,9 +1,11 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @inject SettingsService AppSettings
+@inject ProfileService UserProfile
 @{
     var requestToken = Antiforgery.GetAndStoreTokens(Context).RequestToken;
     var activeNav = ViewData["ActiveNav"] as string ?? string.Empty;
     var appSettings = AppSettings.Load();
+    var currentUser = UserProfile.Load();
 
     string NavClass(string key) =>
         activeNav == key ? "admin-nav-link active" : "admin-nav-link";
@@ -106,6 +108,14 @@
                     <i class="bi bi-gear"></i>
                     <span>تنظیمات</span>
                 </a>
+                <a class="@NavClass("captcha")" asp-controller="Admin" asp-action="Captcha">
+                    <i class="bi bi-shield-check"></i>
+                    <span>کپچا (امنیت)</span>
+                </a>
+                <a class="@NavClass("profile")" asp-controller="Admin" asp-action="Profile">
+                    <i class="bi bi-person-vcard"></i>
+                    <span>پروفایل من</span>
+                </a>
             </nav>
 
             <div class="admin-sidebar-footer">
@@ -151,13 +161,15 @@
                         <span class="d-none d-sm-inline" id="themeToggleText">تم تاریک</span>
                     </button>
 
-                    <div class="admin-user" title="مدیر فروشگاه">
-                        <span class="admin-avatar">م</span>
-                        <span class="d-none d-xl-flex flex-column">
-                            <strong>مدیر فروشگاه</strong>
-                            <small>مدیر سیستم</small>
+                    <button type="button" class="admin-user" id="userPanelToggle"
+                            aria-controls="adminUserPanel" aria-expanded="false"
+                            title="پنل کاربری">
+                        <span class="admin-avatar">@currentUser.AvatarLetter</span>
+                        <span class="d-none d-xl-flex flex-column text-start">
+                            <strong>@currentUser.FullName</strong>
+                            <small>@currentUser.RoleTitle</small>
                         </span>
-                    </div>
+                    </button>
                 </div>
             </header>
 
@@ -171,6 +183,8 @@
             </footer>
         </div>
     </div>
+
+    @await Html.PartialAsync("_UserPanel", currentUser)
 
     <div id="admin-toast-data"
          data-success="@TempData["Success"]"

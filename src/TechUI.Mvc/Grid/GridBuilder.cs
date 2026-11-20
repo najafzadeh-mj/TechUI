@@ -36,6 +36,8 @@ namespace TechUI.Mvc.Grid
         private bool _reorderable;
         private bool _groupPanel;
         private bool _infiniteScroll;
+        private bool _stackedRows;
+        private int _stackedTitleColumns = 1;
         private int? _height;
         private string? _ariaLabel;
         private readonly List<TechGridSort> _initialSorts = new();
@@ -92,6 +94,37 @@ namespace TechUI.Mvc.Grid
         public GridBuilder<TModel> InfiniteScroll(bool enabled = true)
         {
             _infiniteScroll = enabled;
+            return this;
+        }
+
+        /// <summary>
+        /// Renders every record on two table rows: the first visible column
+        /// gets a cell of its own on the title row, and the remaining
+        /// columns are shown on the row below it. The title cell keeps the
+        /// column width, so the column's Width() setting controls it.
+        /// </summary>
+        public GridBuilder<TModel> StackedRows(bool enabled = true)
+        {
+            _stackedRows = enabled;
+
+            if (!enabled) _stackedTitleColumns = 1;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Renders every record on two table rows. The first
+        /// <paramref name="titleColumns"/> visible columns get their own
+        /// cells on the title row, each keeping the width set with
+        /// Width(), and the rest are shown on the row below it. When the
+        /// visible column count is not greater than
+        /// <paramref name="titleColumns"/>, rows are rendered normally.
+        /// </summary>
+        public GridBuilder<TModel> StackedRows(int titleColumns)
+        {
+            _stackedRows = true;
+            _stackedTitleColumns = titleColumns > 0 ? titleColumns : 1;
+
             return this;
         }
 
@@ -288,6 +321,8 @@ namespace TechUI.Mvc.Grid
             container.Attributes["data-reorderable"] = _reorderable.ToString().ToLowerInvariant();
             container.Attributes["data-group-panel"] = _groupPanel.ToString().ToLowerInvariant();
             container.Attributes["data-infinite-scroll"] = _infiniteScroll.ToString().ToLowerInvariant();
+            container.Attributes["data-stacked-rows"] = _stackedRows.ToString().ToLowerInvariant();
+            container.Attributes["data-stacked-title-columns"] = _stackedTitleColumns.ToString();
 
             if (!string.IsNullOrWhiteSpace(_ariaLabel))
             {

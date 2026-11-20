@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using TechUI.Mvc.Captcha;
 using TechUI.Mvc.Grid;
 using TechUI.Mvc.Infrastructure;
 using TechUI.SampleAdmin.Data;
@@ -65,11 +66,16 @@ public sealed class AdminController : Controller
 
     private readonly AdminDbContext _db;
     private readonly SettingsService _settings;
+    private readonly ProfileService _profile;
 
-    public AdminController(AdminDbContext db, SettingsService settings)
+    public AdminController(
+        AdminDbContext db,
+        SettingsService settings,
+        ProfileService profile)
     {
         _db = db;
         _settings = settings;
+        _profile = profile;
     }
 
     // ---------------------------------------------------------
@@ -889,6 +895,97 @@ public sealed class AdminController : Controller
     }
 
     // ---------------------------------------------------------
+    // Captcha
+    // ---------------------------------------------------------
+
+    [HttpGet]
+    public IActionResult Captcha()
+    {
+        SetCaptchaChrome();
+
+        return View(new CaptchaFormModel());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Captcha(
+        CaptchaFormModel model,
+        CancellationToken cancellationToken)
+    {
+        SetCaptchaChrome();
+
+        var captcha = await HttpContext.Request.ValidateTechCaptchaAsync(
+            nameof(model.Captcha),
+            cancellationToken);
+
+        if (!captcha.IsValid)
+        {
+            ModelState.AddModelError(
+                nameof(model.Captcha),
+                captcha.Error ?? "کد امنیتی نامعتبر است.");
+
+            return View(model);
+        }
+
+        ModelState.Clear();
+
+        ViewBag.Success = true;
+
+        return View(new CaptchaFormModel());
+    }
+
+    // ---------------------------------------------------------
+    // Profile
+    // ---------------------------------------------------------
+
+    [HttpGet]
+    public IActionResult Profile()
+    {
+        ViewData["Title"] = "پروفایل من";
+        ViewData["ActiveNav"] = "profile";
+        SetBreadcrumb(
+            ("پنل", "Index"),
+            ("پروفایل من", null));
+
+        return View(_profile.Load());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult Profile(AdminProfile model)
+    {
+        ViewData["Title"] = "پروفایل من";
+        ViewData["ActiveNav"] = "profile";
+        SetBreadcrumb(
+            ("پنل", "Index"),
+            ("پروفایل من", null));
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        model.FullName = model.FullName.Trim();
+        model.RoleTitle = model.RoleTitle.Trim();
+        model.Email = model.Email.Trim();
+        model.Phone = string.IsNullOrWhiteSpace(model.Phone)
+            ? null
+            : model.Phone.Trim();
+        model.City = string.IsNullOrWhiteSpace(model.City)
+            ? null
+            : model.City.Trim();
+        model.Bio = string.IsNullOrWhiteSpace(model.Bio)
+            ? null
+            : model.Bio.Trim();
+
+        _profile.Save(model);
+
+        TempData["Success"] = "پروفایل با موفقیت ذخیره شد.";
+
+        return RedirectToAction(nameof(Profile));
+    }
+
+    // ---------------------------------------------------------
     // Error
     // ---------------------------------------------------------
 
@@ -909,6 +1006,15 @@ public sealed class AdminController : Controller
     private void SetBreadcrumb(params (string Text, string? Action)[] trail)
     {
         ViewData["Breadcrumb"] = trail.ToList();
+    }
+
+    private void SetCaptchaChrome()
+    {
+        ViewData["Title"] = "کپچا (امنیت)";
+        ViewData["ActiveNav"] = "captcha";
+        SetBreadcrumb(
+            ("پنل", "Index"),
+            ("کپچا (امنیت)", null));
     }
 
     private static string MonthLabel(DateTime date)

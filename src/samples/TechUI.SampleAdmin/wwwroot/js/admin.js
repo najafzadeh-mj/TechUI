@@ -66,6 +66,59 @@
         });
     }
 
+    const userPanel = document.getElementById('adminUserPanel');
+    const userPanelToggle = document.getElementById('userPanelToggle');
+    const userPanelBackdrop = document.getElementById('adminUserPanelBackdrop');
+    const userPanelClose = document.getElementById('adminUserPanelClose');
+
+    function setUserPanel(open) {
+
+        if (!userPanel || !userPanelToggle) return;
+
+        userPanel.classList.toggle('is-open', open);
+        userPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        userPanelToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        document.body.classList.toggle('admin-panel-open', open);
+
+        if (userPanelBackdrop) {
+            userPanelBackdrop.classList.toggle('is-open', open);
+        }
+
+        if (open && userPanelClose) {
+            userPanelClose.focus({ preventScroll: true });
+        }
+    }
+
+    if (userPanel && userPanelToggle) {
+
+        userPanelToggle.addEventListener('click', function () {
+            setUserPanel(!userPanel.classList.contains('is-open'));
+        });
+
+        if (userPanelClose) {
+            userPanelClose.addEventListener('click', function () {
+                setUserPanel(false);
+                userPanelToggle.focus();
+            });
+        }
+
+        if (userPanelBackdrop) {
+            userPanelBackdrop.addEventListener('click', function () {
+                setUserPanel(false);
+            });
+        }
+
+        document.addEventListener('keydown', function (ev) {
+
+            if (ev.key !== 'Escape') return;
+
+            if (!userPanel.classList.contains('is-open')) return;
+
+            setUserPanel(false);
+            userPanelToggle.focus();
+        });
+    }
+
     const toastData = document.getElementById('admin-toast-data');
 
     if (toastData) {
