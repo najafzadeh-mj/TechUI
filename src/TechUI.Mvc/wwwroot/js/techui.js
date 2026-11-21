@@ -7013,6 +7013,149 @@ Tech.DatePicker.setCalendar = function (id, mode) {
     if (instance) instance.setCalendar(mode);
 };
 
+function techDatePickerYearLimits(state) {
+
+    return state.mode === 'gregorian'
+        ? { min: 1, max: 9999 }
+        : { min: 1200, max: 1600 };
+}
+
+function techDatePickerClampYear(state, year) {
+
+    const limits = techDatePickerYearLimits(state);
+
+    return Math.min(limits.max, Math.max(limits.min, year));
+}
+
+function techDatePickerCurrentYear(state) {
+
+    return state.mode === 'gregorian' ? state.gy : state.jy;
+}
+
+function techDatePickerYearPageStart(state) {
+
+    const limits = techDatePickerYearLimits(state);
+    const year = techDatePickerCurrentYear(state);
+
+    let start = year - techMod(year, 12);
+
+    const maxStart = Math.max(limits.min, limits.max - 11);
+
+    if (start > maxStart) start = maxStart;
+    if (start < limits.min) start = limits.min;
+
+    return start;
+}
+
+function techDatePickerMonthBounds(state, month) {
+
+    if (state.mode === 'gregorian') {
+
+        const length = techGregorianDate(state.gy, month + 1, 0).getDate();
+
+        return {
+            first: techIsoDate(state.gy, month, 1),
+            last: techIsoDate(state.gy, month, length)
+        };
+    }
+
+    const length = techJalaliMonthLength(state.jy, month);
+
+    const first = techJalaliToGregorian(state.jy, month, 1);
+    const last = techJalaliToGregorian(state.jy, month, length);
+
+    return {
+        first: techIsoDate(first.gy, first.gm, first.gd),
+        last: techIsoDate(last.gy, last.gm, last.gd)
+    };
+}
+
+function techDatePickerYearBounds(state, year) {
+
+    if (state.mode === 'gregorian') {
+
+        return {
+            first: techIsoDate(year, 1, 1),
+            last: techIsoDate(year, 12, 31)
+        };
+    }
+
+    const first = techJalaliToGregorian(year, 1, 1);
+    const last = techJalaliToGregorian(
+        year, 12, techJalaliMonthLength(year, 12));
+
+    return {
+        first: techIsoDate(first.gy, first.gm, first.gd),
+        last: techIsoDate(last.gy, last.gm, last.gd)
+    };
+}
+
+function techDatePickerRangeDisabled(firstIso, lastIso, min, max) {
+
+    return !!((max && firstIso > max) || (min && lastIso < min));
+}
+
+function techDatePickerMonthGridHtml(state, min, max) {
+
+    const names = state.mode === 'gregorian'
+        ? techGregorianMonthNames
+        : techJalaliMonthNames;
+
+    const active = state.mode === 'gregorian' ? state.gm : state.jm;
+    const year = techDatePickerCurrentYear(state);
+
+    let html = '<div class="tech-dp-picker-grid">';
+
+    names.forEach(function (name, index) {
+
+        const month = index + 1;
+        const bounds = techDatePickerMonthBounds(state, month);
+        const classes = ['tech-dp-pick'];
+
+        if (month === active) classes.push('is-current');
+
+        if (techDatePickerRangeDisabled(bounds.first, bounds.last, min, max)) {
+            classes.push('is-disabled');
+        }
+
+        html += '<button type="button" class="' + classes.join(' ') + '" ' +
+            'data-month="' + month + '" aria-label="' + name + ' ' + year +
+            '">' + name + '</button>';
+    });
+
+    return html + '</div>';
+}
+
+function techDatePickerYearGridHtml(state, min, max) {
+
+    const start = state.yearPageStart != null
+        ? state.yearPageStart
+        : techDatePickerYearPageStart(state);
+
+    const current = techDatePickerCurrentYear(state);
+
+    let html = '<div class="tech-dp-picker-grid">';
+
+    for (let index = 0; index < 12; index++) {
+
+        const year = start + index;
+        const bounds = techDatePickerYearBounds(state, year);
+        const classes = ['tech-dp-pick'];
+
+        if (year === current) classes.push('is-current');
+
+        if (techDatePickerRangeDisabled(bounds.first, bounds.last, min, max)) {
+            classes.push('is-disabled');
+        }
+
+        html += '<button type="button" class="' + classes.join(' ') + '" ' +
+            'data-year="' + year + '" aria-label="سال ' + year + '">' +
+            year + '</button>';
+    }
+
+    return html + '</div>';
+}
+
 function techRenderDatePicker(root, state) {
 
     const panel = root.querySelector('.tech-datepicker-panel');
@@ -7029,7 +7172,7 @@ function techRenderDatePicker(root, state) {
     const min = root.dataset.min || '';
     const max = root.dataset.max || '';
 
-    let title;
+    let monthName;
     let length;
     let offset;
 
@@ -7037,7 +7180,7 @@ function techRenderDatePicker(root, state) {
 
         length = techGregorianDate(state.gy, state.gm + 1, 0).getDate();
         offset = (techGregorianDate(state.gy, state.gm, 1).getDay() + 1) % 7;
-        title = techGregorianMonthNames[state.gm - 1] + ' ' + state.gy;
+        monthName = techGregorianMonthNames[state.gm - 1];
     }
     else {
 
@@ -7047,7 +7190,23 @@ function techRenderDatePicker(root, state) {
 
         offset = (new Date(first.gy, first.gm - 1, first.gd)
             .getDay() - 6 + 7) % 7;
-        title = techJalaliMonthNames[state.jm - 1] + ' ' + state.jy;
+        monthName = techJalaliMonthNames[state.jm - 1];
+    }
+
+    const view = state.view === 'months' || state.view === 'years'
+        ? state.view
+        : 'days';
+
+    const year = techDatePickerCurrentYear(state);
+
+    const yearButton = '<button type="button" class="tech-dp-title-btn" ' +
+        'data-view="years" aria-label="انتخاب سال">' + year + '</button>';
+
+    function navButton(direction, label) {
+
+        return '<button type="button" class="tech-dp-nav" data-nav="' +
+            direction + '" aria-label="' + label + '">' +
+            (direction === 'py' ? '«' : '»') + '</button>';
     }
 
     let html = '<div class="tech-dp-header">';
@@ -7063,68 +7222,104 @@ function techRenderDatePicker(root, state) {
             + label + '</button>';
     }
 
-    html += '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
-        + '<button type="button" class="tech-dp-nav" data-nav="pm" aria-label="ماه قبل">‹</button>'
-        + '<span class="tech-dp-title">' + title + '</span>'
-        + '<button type="button" class="tech-dp-nav" data-nav="nm" aria-label="ماه بعد">›</button>'
-        + '<button type="button" class="tech-dp-nav" data-nav="ny" aria-label="سال بعد">»</button>'
-        + '</div>';
+    if (view === 'years') {
 
-    html += '<table class="tech-dp-grid"><thead><tr>';
+        const start = state.yearPageStart != null
+            ? state.yearPageStart
+            : techDatePickerYearPageStart(state);
 
-    techJalaliWeekDays.forEach(function (name) {
-        html += '<th>' + name + '</th>';
-    });
+        html += navButton('py', 'بازه قبل')
+            + '<span class="tech-dp-title">' +
+            '<span class="tech-dp-title-text">' + start + ' – ' +
+            (start + 11) + '</span></span>'
+            + navButton('ny', 'بازه بعد');
+    }
+    else if (view === 'months') {
 
-    html += '</tr></thead><tbody><tr>';
+        html += navButton('py', 'سال قبل')
+            + '<span class="tech-dp-title">' + yearButton + '</span>'
+            + navButton('ny', 'سال بعد');
+    }
+    else {
 
-    let cell = 0;
-
-    for (let i = 0; i < offset; i++) {
-        html += '<td></td>';
-        cell++;
+        html += navButton('py', 'سال قبل')
+            + navButton('pm', 'ماه قبل')
+            + '<span class="tech-dp-title">' +
+            '<button type="button" class="tech-dp-title-btn" ' +
+            'data-view="months" aria-label="انتخاب ماه">' +
+            monthName + '</button>' + yearButton + '</span>'
+            + navButton('nm', 'ماه بعد')
+            + navButton('ny', 'سال بعد');
     }
 
-    for (let day = 1; day <= length; day++) {
+    html += '</div>';
 
-        if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
+    if (view === 'months') {
 
-        let dayIso;
-
-        if (mode === 'gregorian') {
-            dayIso = techIsoDate(state.gy, state.gm, day);
-        }
-        else {
-            const gregorian = techJalaliToGregorian(state.jy, state.jm, day);
-
-            dayIso = techIsoDate(
-                gregorian.gy, gregorian.gm, gregorian.gd);
-        }
-
-        const classes = ['tech-dp-day'];
-
-        if ((offset + day - 1) % 7 === 6) classes.push('is-weekend');
-
-        if (dayIso === iso) classes.push('is-selected');
-
-        if (dayIso === todayIso) classes.push('is-today');
-
-        if ((min && dayIso < min) || (max && dayIso > max)) {
-            classes.push('is-disabled');
-        }
-
-        html += '<td><button type="button" class="' + classes.join(' ')
-            + '" data-day="' + dayIso + '">' + day + '</button></td>';
-
-        cell++;
+        html += techDatePickerMonthGridHtml(state, min, max);
     }
+    else if (view === 'years') {
 
-    while (cell % 7 !== 0) {
-        html += '<td></td>';
-        cell++;
+        html += techDatePickerYearGridHtml(state, min, max);
     }
+    else {
 
-    html += '</tr></tbody></table>';
+        html += '<table class="tech-dp-grid"><thead><tr>';
+
+        techJalaliWeekDays.forEach(function (name) {
+            html += '<th>' + name + '</th>';
+        });
+
+        html += '</tr></thead><tbody><tr>';
+
+        let cell = 0;
+
+        for (let i = 0; i < offset; i++) {
+            html += '<td></td>';
+            cell++;
+        }
+
+        for (let day = 1; day <= length; day++) {
+
+            if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
+
+            let dayIso;
+
+            if (mode === 'gregorian') {
+                dayIso = techIsoDate(state.gy, state.gm, day);
+            }
+            else {
+                const gregorian = techJalaliToGregorian(state.jy, state.jm, day);
+
+                dayIso = techIsoDate(
+                    gregorian.gy, gregorian.gm, gregorian.gd);
+            }
+
+            const classes = ['tech-dp-day'];
+
+            if ((offset + day - 1) % 7 === 6) classes.push('is-weekend');
+
+            if (dayIso === iso) classes.push('is-selected');
+
+            if (dayIso === todayIso) classes.push('is-today');
+
+            if ((min && dayIso < min) || (max && dayIso > max)) {
+                classes.push('is-disabled');
+            }
+
+            html += '<td><button type="button" class="' + classes.join(' ')
+                + '" data-day="' + dayIso + '">' + day + '</button></td>';
+
+            cell++;
+        }
+
+        while (cell % 7 !== 0) {
+            html += '<td></td>';
+            cell++;
+        }
+
+        html += '</tr></tbody></table>';
+    }
 
     if (root.dataset.today !== 'false' || root.dataset.clear !== 'false') {
 
@@ -7193,6 +7388,8 @@ function techSetDatePickerCalendar(root, mode) {
     };
 
     state.mode = next;
+    state.view = 'days';
+    state.yearPageStart = null;
 
     if (next === 'gregorian') {
         state.gy = anchor.y;
@@ -7250,6 +7447,9 @@ function techOpenDatePicker(root) {
         state.jm = jalali.jm;
     }
 
+    state.view = 'days';
+    state.yearPageStart = null;
+
     techRenderDatePicker(root, state);
 
     root.classList.add('open');
@@ -7292,6 +7492,8 @@ function initDatePicker(root) {
         mode: techCalendarOption(root) === 'gregorian'
             ? 'gregorian'
             : 'jalali',
+        view: 'days',
+        yearPageStart: null,
         jy: todayJ.jy,
         jm: todayJ.jm,
         gy: today.getFullYear(),
@@ -7343,6 +7545,40 @@ function initDatePicker(root) {
 
             const state = root._techDateState;
 
+            if (state.view === 'years') {
+
+                const limits = techDatePickerYearLimits(state);
+                const step = nav.dataset.nav === 'py' ? -12 : 12;
+                const start = (state.yearPageStart != null
+                    ? state.yearPageStart
+                    : techDatePickerYearPageStart(state)) + step;
+
+                const maxStart = Math.max(limits.min, limits.max - 11);
+
+                state.yearPageStart = Math.min(
+                    maxStart, Math.max(limits.min, start));
+
+                techRenderDatePicker(root, state);
+
+                return;
+            }
+
+            if (state.view === 'months') {
+
+                const step = nav.dataset.nav === 'py' ? -1 : 1;
+
+                if (state.mode === 'gregorian') {
+                    state.gy = techDatePickerClampYear(state, state.gy + step);
+                }
+                else {
+                    state.jy = techDatePickerClampYear(state, state.jy + step);
+                }
+
+                techRenderDatePicker(root, state);
+
+                return;
+            }
+
             if (state.mode === 'gregorian') {
 
                 switch (nav.dataset.nav) {
@@ -7387,6 +7623,70 @@ function initDatePicker(root) {
                 if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
                 if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
             }
+
+            techRenderDatePicker(root, state);
+
+            return;
+        }
+
+        const viewButton = ev.target.closest('[data-view]');
+
+        if (viewButton) {
+
+            const state = root._techDateState;
+            const next = viewButton.dataset.view;
+
+            state.view = next === 'months' || next === 'years'
+                ? next
+                : 'days';
+
+            if (state.view === 'years') {
+                state.yearPageStart = techDatePickerYearPageStart(state);
+            }
+
+            techRenderDatePicker(root, state);
+
+            return;
+        }
+
+        const monthCell = ev.target.closest('[data-month]');
+
+        if (monthCell) {
+
+            const state = root._techDateState;
+
+            if (monthCell.classList.contains('is-disabled')) return;
+
+            const month = +monthCell.dataset.month;
+
+            if (month < 1 || month > 12) return;
+
+            if (state.mode === 'gregorian') state.gm = month;
+            else state.jm = month;
+
+            state.view = 'days';
+
+            techRenderDatePicker(root, state);
+
+            return;
+        }
+
+        const yearCell = ev.target.closest('[data-year]');
+
+        if (yearCell) {
+
+            const state = root._techDateState;
+
+            if (yearCell.classList.contains('is-disabled')) return;
+
+            const year = techDatePickerClampYear(
+                state, +yearCell.dataset.year);
+
+            if (state.mode === 'gregorian') state.gy = year;
+            else state.jy = year;
+
+            state.yearPageStart = techDatePickerYearPageStart(state);
+            state.view = 'months';
 
             techRenderDatePicker(root, state);
 
@@ -7570,6 +7870,10 @@ function techRenderDateRange(root) {
 
     const mode = techDateRangeMode(root);
 
+    const view = state.view === 'months' || state.view === 'years'
+        ? state.view
+        : 'days';
+
     const start = state.start;
     const end = state.end;
     const preview = start && !end ? state.hover : null;
@@ -7594,6 +7898,31 @@ function techRenderDateRange(root) {
         ? techGregorianMonthNames
         : techJalaliMonthNames;
 
+    const year = mode === 'gregorian' ? state.gy : state.jy;
+
+    function navButton(direction, label) {
+
+        return '<button type="button" class="tech-dp-nav" data-nav="' +
+            direction + '" aria-label="' + label + '">' +
+            (direction === 'py' ? '«' : '»') + '</button>';
+    }
+
+    function yearTitleButton(value) {
+
+        return '<button type="button" class="tech-dp-title-btn" ' +
+            'data-range-view="years" data-range-year="' + value + '" ' +
+            'aria-label="انتخاب سال ' + value + '">' + value + '</button>';
+    }
+
+    function monthTitleButton(item) {
+
+        return '<button type="button" class="tech-dp-title-btn" ' +
+            'data-range-view="months" data-range-year="' + item.year + '" ' +
+            'data-range-month="' + item.month + '" ' +
+            'aria-label="انتخاب ماه">' +
+            monthNames[item.month - 1] + '</button>';
+    }
+
     let html = '<div class="tech-dr-header">';
 
     if (techCalendarOption(root) === 'both') {
@@ -7607,84 +7936,117 @@ function techRenderDateRange(root) {
             + label + '</button>';
     }
 
-    html += '<button type="button" class="tech-dp-nav" data-nav="py" aria-label="سال قبل">«</button>'
-        + '<button type="button" class="tech-dp-nav" data-nav="pm" aria-label="ماه قبل">‹</button>'
-        + '<span class="tech-dp-title">'
-        + monthNames[months[0].month - 1] + ' ' + months[0].year
-        + ' – '
-        + monthNames[months[1].month - 1] + ' ' + months[1].year
-        + '</span>'
-        + '<button type="button" class="tech-dp-nav" data-nav="nm" aria-label="ماه بعد">›</button>'
-        + '<button type="button" class="tech-dp-nav" data-nav="ny" aria-label="سال بعد">»</button>'
-        + '</div>';
+    if (view === 'years') {
 
-    html += '<div class="tech-dr-months">';
+        const pageStart = state.yearPageStart != null
+            ? state.yearPageStart
+            : techDatePickerYearPageStart(state);
 
-    months.forEach(function (month) {
+        html += navButton('py', 'بازه قبل')
+            + '<span class="tech-dp-title">' +
+            '<span class="tech-dp-title-text">' + pageStart + ' – ' +
+            (pageStart + 11) + '</span></span>'
+            + navButton('ny', 'بازه بعد');
+    }
+    else if (view === 'months') {
 
-        const length = techRangeMonthLength(
-            mode, month.year, month.month);
+        html += navButton('py', 'سال قبل')
+            + '<span class="tech-dp-title">' + yearTitleButton(year) + '</span>'
+            + navButton('ny', 'سال بعد');
+    }
+    else {
 
-        const offset = techRangeMonthOffset(
-            mode, month.year, month.month);
-
-        html += '<div class="tech-dr-month">'
-            + '<table class="tech-dp-grid"><thead><tr>';
-
-        techJalaliWeekDays.forEach(function (name) {
-            html += '<th>' + name + '</th>';
-        });
-
-        html += '</tr></thead><tbody><tr>';
-
-        let cell = 0;
-
-        for (; cell < offset; cell++) {
-            html += '<td></td>';
-        }
-
-        for (let day = 1; day <= length; day++) {
-
-            if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
-
-            const dayIso = techRangeDayIso(
-                mode, month.year, month.month, day);
-
-            const classes = ['tech-dp-day'];
-
-            if ((offset + day - 1) % 7 === 6) classes.push('is-weekend');
-
-            if (dayIso === start || dayIso === end) {
-                classes.push('is-selected');
-            }
-            else if (start && rangeEnd &&
-                dayIso > start && dayIso < rangeEnd) {
-                classes.push('is-in-range');
-            }
-
-            if (dayIso === todayIso) {
-                classes.push('is-today');
-            }
-
-            if ((min && dayIso < min) || (max && dayIso > max)) {
-                classes.push('is-disabled');
-            }
-
-            html += '<td><button type="button" class="' + classes.join(' ')
-                + '" data-day="' + dayIso + '">' + day + '</button></td>';
-
-            cell++;
-        }
-
-        while (cell % 7 !== 0) {
-            html += '<td></td>';
-            cell++;
-        }
-
-        html += '</tr></tbody></table></div>';
-    });
+        html += navButton('py', 'سال قبل')
+            + navButton('pm', 'ماه قبل')
+            + '<span class="tech-dp-title">' +
+            monthTitleButton(months[0]) + yearTitleButton(months[0].year) +
+            ' – ' +
+            monthTitleButton(months[1]) + yearTitleButton(months[1].year) +
+            '</span>'
+            + navButton('nm', 'ماه بعد')
+            + navButton('ny', 'سال بعد');
+    }
 
     html += '</div>';
+
+    if (view === 'months') {
+
+        html += techDatePickerMonthGridHtml(state, min, max);
+    }
+    else if (view === 'years') {
+
+        html += techDatePickerYearGridHtml(state, min, max);
+    }
+    else {
+
+        html += '<div class="tech-dr-months">';
+
+        months.forEach(function (month) {
+
+            const length = techRangeMonthLength(
+                mode, month.year, month.month);
+
+            const offset = techRangeMonthOffset(
+                mode, month.year, month.month);
+
+            html += '<div class="tech-dr-month">'
+                + '<table class="tech-dp-grid"><thead><tr>';
+
+            techJalaliWeekDays.forEach(function (name) {
+                html += '<th>' + name + '</th>';
+            });
+
+            html += '</tr></thead><tbody><tr>';
+
+            let cell = 0;
+
+            for (; cell < offset; cell++) {
+                html += '<td></td>';
+            }
+
+            for (let day = 1; day <= length; day++) {
+
+                if (cell > 0 && cell % 7 === 0) html += '</tr><tr>';
+
+                const dayIso = techRangeDayIso(
+                    mode, month.year, month.month, day);
+
+                const classes = ['tech-dp-day'];
+
+                if ((offset + day - 1) % 7 === 6) classes.push('is-weekend');
+
+                if (dayIso === start || dayIso === end) {
+                    classes.push('is-selected');
+                }
+                else if (start && rangeEnd &&
+                    dayIso > start && dayIso < rangeEnd) {
+                    classes.push('is-in-range');
+                }
+
+                if (dayIso === todayIso) {
+                    classes.push('is-today');
+                }
+
+                if ((min && dayIso < min) || (max && dayIso > max)) {
+                    classes.push('is-disabled');
+                }
+
+                html += '<td><button type="button" class="' + classes.join(' ')
+                    + '" data-day="' + dayIso + '">' + day + '</button></td>';
+
+                cell++;
+            }
+
+            while (cell % 7 !== 0) {
+                html += '<td></td>';
+                cell++;
+            }
+
+            html += '</tr></tbody></table></div>';
+        });
+
+        html += '</div>';
+    }
 
     let summary = 'تاریخ شروع را انتخاب کنید.';
 
@@ -7710,6 +8072,8 @@ function techRenderDateRange(root) {
     }
 
     html += '</span></div>';
+
+    panel.classList.toggle('is-picker', view !== 'days');
 
     panel.innerHTML = html;
 }
@@ -7802,6 +8166,9 @@ function techSetDateRangeCalendar(root, mode) {
     if (startInput) startInput.value = techRangeDisplay(root, state.start);
     if (endInput) endInput.value = techRangeDisplay(root, state.end);
 
+    state.view = 'days';
+    state.yearPageStart = null;
+
     if (root.classList.contains('open')) {
         techRenderDateRange(root);
     }
@@ -7838,6 +8205,9 @@ function techOpenDateRange(root) {
             state.jm = jalali.jm;
         }
     }
+
+    state.view = 'days';
+    state.yearPageStart = null;
 
     techRenderDateRange(root);
 
@@ -7893,7 +8263,9 @@ function initDateRangePicker(root) {
         gm: today.getMonth() + 1,
         start: null,
         end: null,
-        hover: null
+        hover: null,
+        view: 'days',
+        yearPageStart: null
     };
 
     techSetDateRangeValue(
@@ -7946,6 +8318,40 @@ function initDateRangePicker(root) {
 
             const state = root._techRangeState;
 
+            if (state.view === 'years') {
+
+                const limits = techDatePickerYearLimits(state);
+                const step = nav.dataset.nav === 'py' ? -12 : 12;
+                const start = (state.yearPageStart != null
+                    ? state.yearPageStart
+                    : techDatePickerYearPageStart(state)) + step;
+
+                const maxStart = Math.max(limits.min, limits.max - 11);
+
+                state.yearPageStart = Math.min(
+                    maxStart, Math.max(limits.min, start));
+
+                techRenderDateRange(root);
+
+                return;
+            }
+
+            if (state.view === 'months') {
+
+                const step = nav.dataset.nav === 'py' ? -1 : 1;
+
+                if (state.mode === 'gregorian') {
+                    state.gy = techDatePickerClampYear(state, state.gy + step);
+                }
+                else {
+                    state.jy = techDatePickerClampYear(state, state.jy + step);
+                }
+
+                techRenderDateRange(root);
+
+                return;
+            }
+
             if (state.mode === 'gregorian') {
 
                 switch (nav.dataset.nav) {
@@ -7990,6 +8396,79 @@ function initDateRangePicker(root) {
                 if (state.jy < 1200) { state.jy = 1200; state.jm = 1; }
                 if (state.jy > 1600) { state.jy = 1600; state.jm = 12; }
             }
+
+            techRenderDateRange(root);
+
+            return;
+        }
+
+        const viewButton = ev.target.closest('[data-range-view]');
+
+        if (viewButton) {
+
+            const state = root._techRangeState;
+            const next = viewButton.dataset.rangeView;
+            const year = techDatePickerClampYear(
+                state, +viewButton.dataset.rangeYear);
+            const month = +viewButton.dataset.rangeMonth;
+
+            if (state.mode === 'gregorian') state.gy = year;
+            else state.jy = year;
+
+            if (month >= 1 && month <= 12) {
+                if (state.mode === 'gregorian') state.gm = month;
+                else state.jm = month;
+            }
+
+            state.view = next === 'years' ? 'years' : 'months';
+
+            if (state.view === 'years') {
+                state.yearPageStart = techDatePickerYearPageStart(state);
+            }
+
+            techRenderDateRange(root);
+
+            return;
+        }
+
+        const monthCell = ev.target.closest('[data-month]');
+
+        if (monthCell) {
+
+            const state = root._techRangeState;
+
+            if (monthCell.classList.contains('is-disabled')) return;
+
+            const month = +monthCell.dataset.month;
+
+            if (month < 1 || month > 12) return;
+
+            if (state.mode === 'gregorian') state.gm = month;
+            else state.jm = month;
+
+            state.view = 'days';
+
+            techRenderDateRange(root);
+
+            return;
+        }
+
+        const yearCell = ev.target.closest('[data-year]');
+
+        if (yearCell) {
+
+            const state = root._techRangeState;
+
+            if (yearCell.classList.contains('is-disabled')) return;
+
+            const year = techDatePickerClampYear(
+                state, +yearCell.dataset.year);
+
+            if (state.mode === 'gregorian') state.gy = year;
+            else state.jy = year;
+
+            state.yearPageStart = techDatePickerYearPageStart(state);
+            state.view = 'months';
 
             techRenderDateRange(root);
 

@@ -2909,12 +2909,68 @@
 
 .tech-dp-title {
     flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .15rem;
     text-align: center;
     color: #212529;
     font-size: .9rem;
     font-weight: 600;
     white-space: nowrap;
 }
+
+.tech-dp-title-btn {
+    padding: .05rem .3rem;
+    border: 0;
+    border-radius: .375rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+    .tech-dp-title-btn:hover,
+    .tech-dp-title-btn:focus-visible {
+        background: #e7f1ff;
+        color: var(--tech-primary, #0d6efd);
+    }
+
+.tech-dp-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 2px 0;
+}
+
+.tech-dp-pick {
+    height: 2.4rem;
+    padding: 0;
+    border: 0;
+    border-radius: .375rem;
+    background: transparent;
+    color: #212529;
+    font-size: .82rem;
+    cursor: pointer;
+}
+
+    .tech-dp-pick:hover {
+        background: #e7f1ff;
+    }
+
+    .tech-dp-pick.is-current {
+        box-shadow: inset 0 0 0 1px var(--tech-primary, #0d6efd);
+    }
+
+    .tech-dp-pick.is-disabled {
+        opacity: .35;
+        cursor: not-allowed;
+    }
+
+    .tech-dp-pick.is-disabled:hover {
+        background: transparent;
+    }
 
 .tech-dp-mode {
     flex: 0 0 auto;
@@ -3082,6 +3138,12 @@
 
 .tech-daterange.open .tech-daterange-panel {
     display: block;
+}
+
+/* Month/year lists are single-calendar wide, so the two-month
+   panel shrinks while drilling down. */
+.tech-daterange-panel.is-picker {
+    width: 320px;
 }
 
 .tech-dr-header {
@@ -5160,6 +5222,8 @@
     .tech-timepicker-toggle:hover,
     .tech-dp-nav:hover,
     .tech-dp-day:hover,
+    .tech-dp-pick:hover,
+    .tech-dp-title-btn:hover,
     .tech-dp-action:hover,
     .tech-tp-action:hover,
     .tech-tp-option:hover,
@@ -5174,6 +5238,7 @@
 
     :is([data-tech-theme="dark"], .tech-dark) :is(
     .tech-dp-day,
+    .tech-dp-pick,
     .tech-tp-option,
     .tech-tab) {
         color: #cbd5e1;
