@@ -98,10 +98,11 @@ namespace TechUI.Mvc.Grid
         }
 
         /// <summary>
-        /// Renders every record on two table rows: the first visible column
-        /// gets a cell of its own on the title row, and the remaining
-        /// columns are shown on the row below it. The title cell keeps the
-        /// column width, so the column's Width() setting controls it.
+        /// Renders every record on two table rows that both start at the
+        /// row start. The first visible column is shown on the title row
+        /// and the remaining columns on the row below it. The header also
+        /// uses two rows with the titles of each line, and Width() sets
+        /// the matching item and header column width.
         /// </summary>
         public GridBuilder<TModel> StackedRows(bool enabled = true)
         {
@@ -113,11 +114,12 @@ namespace TechUI.Mvc.Grid
         }
 
         /// <summary>
-        /// Renders every record on two table rows. The first
-        /// <paramref name="titleColumns"/> visible columns get their own
-        /// cells on the title row, each keeping the width set with
-        /// Width(), and the rest are shown on the row below it. When the
-        /// visible column count is not greater than
+        /// Renders every record on two table rows that both start at the
+        /// row start. The first <paramref name="titleColumns"/> visible
+        /// columns are shown on the title row and the rest on the row
+        /// below it. The header also uses two rows with the titles of each
+        /// line, and Width() sets the matching item and header column
+        /// width. When the visible column count is not greater than
         /// <paramref name="titleColumns"/>, rows are rendered normally.
         /// </summary>
         public GridBuilder<TModel> StackedRows(int titleColumns)

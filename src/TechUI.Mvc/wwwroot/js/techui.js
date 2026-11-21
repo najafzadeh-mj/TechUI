@@ -1515,104 +1515,194 @@ Tech.register('grid', function (el) {
         return html;
     }
 
+    function stackedTitleCount(visibleCount) {
+
+        return Math.min(
+            stackedTitleColumns, Math.max(1, visibleCount - 1));
+    }
+
+    function sortHeaderState(column) {
+
+        const sortIndex = state.sorts.findIndex(function (sort) {
+            return sort.field === column.field;
+        });
+
+        const sort = sortIndex >= 0 ? state.sorts[sortIndex] : null;
+
+        let icon = '';
+
+        if (sort) {
+
+            icon = sort.dir === 'asc'
+                ? '<i class="bi bi-sort-down-alt ms-1"></i>'
+                : '<i class="bi bi-sort-down ms-1"></i>';
+
+            icon += `<sup class="tech-sort-index">${sortIndex + 1}</sup>`;
+        }
+
+        const canSort = sortableEnabled && column.sortable && column.field;
+
+        return {
+            icon: icon,
+            sortClass: canSort ? 'tech-sortable' : '',
+            sortCursor: canSort ? 'cursor:pointer;' : '',
+            sortAttrs: canSort ? 'role="button" tabindex="0"' : '',
+            sortTitle: canSort
+                ? 'title="مرتب‌سازی — برای چندستونه Shift+کلیک"'
+                : '',
+            ariaSort: canSort
+                ? `aria-sort="${!sort
+                    ? 'none'
+                    : sort.dir === 'asc' ? 'ascending' : 'descending'}"`
+                : ''
+        };
+    }
+
+    function filterButtonHtml(column) {
+
+        const activeFilter = findFilter(column.field);
+
+        const canFilter = filterableEnabled &&
+            column.filterable &&
+            !!column.field;
+
+        if (!canFilter) return '';
+
+        return '<button type="button" ' +
+            `class="btn btn-sm p-0 ms-1 tech-filter-btn ${activeFilter ? 'text-primary' : 'text-muted'}" ` +
+            `data-field="${Tech.escapeHtml(column.field)}" ` +
+            `aria-label="فیلتر ${Tech.escapeHtml(column.title)}" ` +
+            'aria-haspopup="dialog" title="فیلتر">' +
+            '<i class="bi bi-funnel-fill"></i></button>';
+    }
+
+    function resizeHandleHtml(column) {
+
+        return resizableEnabled
+            ? `<span class="tech-resize-handle" data-key="${Tech.escapeHtml(column.key)}"></span>`
+            : '';
+    }
+
+    function reorderHandleHtml(column) {
+
+        return reorderableEnabled
+            ? '<span class="tech-reorder-handle" draggable="true" ' +
+              `data-key="${Tech.escapeHtml(column.key)}" ` +
+              'title="جابه‌جایی ستون" aria-hidden="true">' +
+              '<i class="bi bi-grip-vertical"></i></span>'
+            : '';
+    }
+
+    function buildHeaderCellHtml(column) {
+
+        const widthStyle = column.width
+            ? `width:${column.width}px;`
+            : '';
+
+        const sort = sortHeaderState(column);
+
+        const pinnedClass = column.pinned ? ' tech-col-pinned' : '';
+
+        return `<th data-key="${Tech.escapeHtml(column.key)}" ` +
+            `class="tech-col${pinnedClass}" scope="col" ${sort.ariaSort} style="${widthStyle}">` +
+            reorderHandleHtml(column) +
+            '<div class="d-flex align-items-center justify-content-between gap-1">' +
+            `<span class="${sort.sortClass} flex-grow-1" ${sort.sortAttrs} ${sort.sortTitle} ` +
+            `data-field="${Tech.escapeHtml(column.field)}" ` +
+            `style="${sort.sortCursor}">` +
+            Tech.escapeHtml(column.title) + sort.icon +
+            '</span>' +
+            filterButtonHtml(column) +
+            '</div>' +
+            resizeHandleHtml(column) +
+            '</th>';
+    }
+
+    function buildStackedHeadItemHtml(column) {
+
+        // Same flex-basis as the record item, so the title sits exactly
+        // above its value in the band below.
+        const widthStyle = column.width
+            ? ` style="flex:0 1 ${column.width}px"`
+            : '';
+
+        const sort = sortHeaderState(column);
+
+        return `<div class="tech-stacked-item tech-stacked-head-item" ` +
+            `data-key="${Tech.escapeHtml(column.key)}" role="columnheader" ` +
+            `${sort.ariaSort}${widthStyle}>` +
+            reorderHandleHtml(column) +
+            `<span class="${sort.sortClass} tech-stacked-head-title" ` +
+            `${sort.sortAttrs} ${sort.sortTitle} ` +
+            `data-field="${Tech.escapeHtml(column.field)}" ` +
+            `style="${sort.sortCursor}">` +
+            Tech.escapeHtml(column.title) + sort.icon +
+            '</span>' +
+            filterButtonHtml(column) +
+            resizeHandleHtml(column) +
+            '</div>';
+    }
+
     function buildHeaderHtml() {
 
-        let html = '<thead><tr>';
+        const visible = visibleColumns();
 
-        if (multiSelectEnabled) {
+        // In stacked mode the header mirrors the two record lines: each
+        // header row is the same flex band as its record line, so titles
+        // sit exactly above their values.
+        const stacked = stackedRowsEnabled &&
+            visible.length > stackedTitleColumns;
+
+        function selectCell(hasCheckbox) {
+
+            if (!multiSelectEnabled) return '';
 
             const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
 
-            html +=
-                `<th class="tech-grid-select-col${pinnedClass}" scope="col">` +
+            if (!hasCheckbox) {
+
+                return `<th class="tech-grid-select-col${pinnedClass}" ` +
+                    'scope="col" aria-hidden="true"></th>';
+            }
+
+            return `<th class="tech-grid-select-col${pinnedClass}" scope="col">` +
                 '<input type="checkbox" class="tech-grid-select-all" ' +
                 'aria-label="انتخاب همه‌ی سطرها"></th>';
         }
 
-        columns.forEach(function (column) {
+        if (!stacked) {
 
-            if (column.hidden) return;
+            let html = '<thead><tr>' + selectCell(true);
 
-            const widthStyle = column.width
-                ? `width:${column.width}px;`
-                : '';
+            visible.forEach(function (column) {
 
-            const sortIndex = state.sorts.findIndex(function (sort) {
-                return sort.field === column.field;
+                html += buildHeaderCellHtml(column);
             });
 
-            const sort = sortIndex >= 0 ? state.sorts[sortIndex] : null;
+            return html + '</tr></thead>';
+        }
 
-            let icon = '';
+        const titleCount = stackedTitleCount(visible.length);
 
-            if (sort) {
+        function headBand(columns) {
 
-                icon = sort.dir === 'asc'
-                    ? '<i class="bi bi-sort-down-alt ms-1"></i>'
-                    : '<i class="bi bi-sort-down ms-1"></i>';
+            return `<th class="tech-stacked-head-cell" ` +
+                `colspan="${visible.length}">` +
+                '<div class="tech-stacked-items tech-stacked-head-items">' +
+                columns.map(buildStackedHeadItemHtml).join('') +
+                '</div></th>';
+        }
 
-                icon += `<sup class="tech-sort-index">${sortIndex + 1}</sup>`;
-            }
-
-            const canSort = sortableEnabled && column.sortable && column.field;
-
-            const activeFilter = findFilter(column.field);
-
-            const canFilter = filterableEnabled &&
-                column.filterable &&
-                !!column.field;
-
-            const filterButton = canFilter
-                ? '<button type="button" ' +
-                  `class="btn btn-sm p-0 ms-1 tech-filter-btn ${activeFilter ? 'text-primary' : 'text-muted'}" ` +
-                  `data-field="${Tech.escapeHtml(column.field)}" ` +
-                  `aria-label="فیلتر ${Tech.escapeHtml(column.title)}" ` +
-                  'aria-haspopup="dialog" title="فیلتر">' +
-                  '<i class="bi bi-funnel-fill"></i></button>'
-                : '';
-
-            const resizeHandle = resizableEnabled
-                ? `<span class="tech-resize-handle" data-key="${Tech.escapeHtml(column.key)}"></span>`
-                : '';
-
-            const reorderHandle = reorderableEnabled
-                ? '<span class="tech-reorder-handle" draggable="true" ' +
-                  `data-key="${Tech.escapeHtml(column.key)}" ` +
-                  'title="جابه‌جایی ستون" aria-hidden="true">' +
-                  '<i class="bi bi-grip-vertical"></i></span>'
-                : '';
-
-            const sortClass = canSort ? 'tech-sortable' : '';
-            const sortCursor = canSort ? 'cursor:pointer;' : '';
-            const sortAttrs = canSort ? 'role="button" tabindex="0"' : '';
-            const sortTitle = canSort
-                ? 'title="مرتب‌سازی — برای چندستونه Shift+کلیک"'
-                : '';
-            const ariaSort = canSort
-                ? `aria-sort="${!sort
-                    ? 'none'
-                    : sort.dir === 'asc' ? 'ascending' : 'descending'}"`
-                : '';
-
-            const pinnedClass = column.pinned ? ' tech-col-pinned' : '';
-
-            html +=
-                `<th data-key="${Tech.escapeHtml(column.key)}" ` +
-                `class="tech-col${pinnedClass}" scope="col" ${ariaSort} style="${widthStyle}">` +
-                reorderHandle +
-                '<div class="d-flex align-items-center justify-content-between gap-1">' +
-                `<span class="${sortClass} flex-grow-1" ${sortAttrs} ${sortTitle} ` +
-                `data-field="${Tech.escapeHtml(column.field)}" ` +
-                `style="${sortCursor}">` +
-                Tech.escapeHtml(column.title) + icon +
-                '</span>' +
-                filterButton +
-                '</div>' +
-                resizeHandle +
-                '</th>';
-        });
-
-        return html + '</tr></thead>';
+        return '<thead>' +
+            '<tr class="tech-stacked-head-title-row">' +
+            selectCell(true) +
+            headBand(visible.slice(0, titleCount)) +
+            '</tr>' +
+            '<tr class="tech-stacked-head-detail-row">' +
+            selectCell(false) +
+            headBand(visible.slice(titleCount)) +
+            '</tr>' +
+            '</thead>';
     }
 
     function buildDataRowHtml(row, rowIndex, visible, highlight, highlightFields) {
@@ -1690,19 +1780,51 @@ Tech.register('grid', function (el) {
         return html + '</tr>';
     }
 
+    function buildStackedItemHtml(column, row, tabIndex) {
+
+        const value = column.isTemplate
+            ? applyTemplate(column.template, row)
+            : Tech.escapeHtml(getValue(row, column.field));
+
+        // Width() becomes the item's flex-basis; items without a width
+        // share the remaining space of their line. The column title is
+        // shown by the two-row header, not inside the record.
+        const widthStyle = column.width
+            ? ` style="flex:0 1 ${column.width}px"`
+            : '';
+
+        return `<div class="tech-stacked-item" ` +
+            `data-key="${Tech.escapeHtml(column.key)}" ` +
+            `tabindex="${tabIndex}"${widthStyle}>` +
+            `<span class="tech-stacked-item-value">${value}</span>` +
+            '</div>';
+    }
+
     function buildStackedRowHtml(
         row, rowIndex, visible,
         selectableClass, selectedClass, highlightClass,
         selectableAttrs, multiSelected) {
 
-        const titleCount = Math.min(
-            stackedTitleColumns, Math.max(1, visible.length - 1));
+        const titleCount = stackedTitleCount(visible.length);
 
         const titleColumns = visible.slice(0, titleCount);
         const detailColumns = visible.slice(titleCount);
 
         const recordClass = 'tech-grid-row' +
             selectableClass + selectedClass + highlightClass;
+
+        const firstTabIndex = rowIndex === 0 ? '0' : '-1';
+
+        const titleItems = titleColumns.map(function (column, index) {
+
+            return buildStackedItemHtml(
+                column, row, index === 0 ? firstTabIndex : '-1');
+        }).join('');
+
+        const detailItems = detailColumns.map(function (column) {
+
+            return buildStackedItemHtml(column, row, '-1');
+        }).join('');
 
         let html = `<tr class="${recordClass} tech-stacked-title-row" ` +
             `data-row-index="${rowIndex}"${selectableAttrs}>`;
@@ -1718,31 +1840,11 @@ Tech.register('grid', function (el) {
                 '</td>';
         }
 
-        // Each title cell stays in its own table column, so column Width()
-        // controls its width; one filler cell completes the row width.
-        titleColumns.forEach(function (column, index) {
-
-            const tabIndex = rowIndex === 0 && index === 0 ? '0' : '-1';
-
-            const cellHtml = column.isTemplate
-                ? applyTemplate(column.template, row)
-                : Tech.escapeHtml(getValue(row, column.field));
-
-            html +=
-                `<td class="tech-stacked-title-cell" ` +
-                `data-key="${Tech.escapeHtml(column.key)}" ` +
-                `tabindex="${tabIndex}">` +
-                cellHtml + '</td>';
-        });
-
-        const fillSpan = visible.length - titleCount;
-
-        if (fillSpan > 0) {
-            html += `<td class="tech-stacked-title-fill" ` +
-                `colspan="${fillSpan}" aria-hidden="true"></td>`;
-        }
-
-        html += '</tr>';
+        // Both lines are full-width bands that start at the row start.
+        html +=
+            `<td class="tech-stacked-title-cell" colspan="${visible.length}">` +
+            `<div class="tech-stacked-items">${titleItems}</div>` +
+            '</td></tr>';
 
         html += `<tr class="${recordClass} tech-stacked-detail-row" ` +
             `data-row-index="${rowIndex}"${selectableAttrs}>`;
@@ -1751,31 +1853,16 @@ Tech.register('grid', function (el) {
 
             const pinnedClass = pinSelectColumn() ? ' tech-col-pinned' : '';
 
-            html += `<td class="tech-grid-select-col tech-stacked-spacer${pinnedClass}" ` +
+            html += `<td class="tech-grid-select-col${pinnedClass}" ` +
                 'aria-hidden="true"></td>';
         }
 
-        for (let index = 0; index < titleCount; index++) {
-            html += '<td class="tech-stacked-spacer" aria-hidden="true"></td>';
-        }
+        html +=
+            `<td class="tech-stacked-detail-cell" colspan="${visible.length}">` +
+            `<div class="tech-stacked-items">${detailItems}</div>` +
+            '</td></tr>';
 
-        detailColumns.forEach(function (column) {
-
-            const pinnedClass = column.pinned ? ' class="tech-col-pinned"' : '';
-
-            const cellAttrs =
-                ` data-key="${Tech.escapeHtml(column.key)}"` +
-                pinnedClass +
-                ' tabindex="-1"';
-
-            html += '<td' + cellAttrs + '>' +
-                (column.isTemplate
-                    ? applyTemplate(column.template, row)
-                    : Tech.escapeHtml(getValue(row, column.field))) +
-                '</td>';
-        });
-
-        return html + '</tr>';
+        return html;
     }
 
     function groupColumn(field) {
@@ -2950,11 +3037,12 @@ Tech.register('grid', function (el) {
 
         const focusState = activeElement &&
             activeElement.matches &&
-            activeElement.matches('td[data-key]') &&
+            activeElement.matches(
+                'td[data-key], .tech-stacked-item[data-key]') &&
             el.contains(activeElement)
             ? {
                 rowIndex: parseInt(
-                    activeElement.parentElement.dataset.rowIndex, 10),
+                    activeElement.closest('tr').dataset.rowIndex, 10),
                 key: activeElement.dataset.key
             }
             : null;
@@ -2989,6 +3077,28 @@ Tech.register('grid', function (el) {
         if (multiSelectEnabled) syncSelectionUi();
 
         applyPinnedOffsets();
+
+        // Keep the second sticky header row below the first one.
+        if (stackedRowsEnabled) {
+
+            const table = el.querySelector('.tech-grid-body table');
+
+            const headRows = table
+                ? table.querySelectorAll('thead tr')
+                : [];
+
+            if (table && headRows.length > 1) {
+
+                // Fractional height kept so the sticky offset matches the
+                // first row exactly and no sub-pixel gap opens above it.
+                const headerHeight =
+                    headRows[0].getBoundingClientRect().height;
+
+                table.style.setProperty(
+                    '--tech-stacked-header-h',
+                    Math.round(headerHeight * 100) / 100 + 'px');
+            }
+        }
 
         const body = el.querySelector('.tech-grid-body');
 
@@ -3041,9 +3151,12 @@ Tech.register('grid', function (el) {
 
             if (cell) {
 
-                el.querySelectorAll('td[data-key][tabindex="0"]').forEach(function (item) {
-                    item.setAttribute('tabindex', '-1');
-                });
+                el.querySelectorAll(
+                    'td[data-key][tabindex="0"], ' +
+                    '.tech-stacked-item[data-key][tabindex="0"]')
+                    .forEach(function (item) {
+                        item.setAttribute('tabindex', '-1');
+                    });
 
                 cell.setAttribute('tabindex', '0');
                 cell.focus();
@@ -3183,7 +3296,8 @@ Tech.register('grid', function (el) {
     function getNavCells(row) {
 
         return row
-            ? Array.from(row.querySelectorAll('td[data-key]'))
+            ? Array.from(row.querySelectorAll(
+                'td[data-key], .tech-stacked-item[data-key]'))
             : [];
     }
 
@@ -3206,9 +3320,11 @@ Tech.register('grid', function (el) {
 
         const cell = cells[clamp(columnIndex, 0, cells.length - 1)];
 
-        el.querySelectorAll('td[data-key][tabindex="0"]').forEach(function (item) {
-            item.setAttribute('tabindex', '-1');
-        });
+        el.querySelectorAll(
+            'td[data-key][tabindex="0"], .tech-stacked-item[data-key][tabindex="0"]')
+            .forEach(function (item) {
+                item.setAttribute('tabindex', '-1');
+            });
 
         cell.setAttribute('tabindex', '0');
         cell.focus();
@@ -3226,7 +3342,8 @@ Tech.register('grid', function (el) {
 
         if (target.closest('a, button, input, select, textarea')) return;
 
-        const cell = target.closest('td[data-key]');
+        const cell = target.closest(
+            'td[data-key], .tech-stacked-item[data-key]');
 
         if (!cell) return;
 
@@ -3804,9 +3921,10 @@ Tech.register('grid', function (el) {
 
                     draggedKey = handle.dataset.key;
 
-                    const th = handle.closest('th');
+                    const target = handle.closest(
+                        'th, .tech-stacked-head-item');
 
-                    if (th) th.classList.add('tech-col-dragging');
+                    if (target) target.classList.add('tech-col-dragging');
 
                     if (ev.dataTransfer) {
 
@@ -3823,58 +3941,61 @@ Tech.register('grid', function (el) {
                 });
             });
 
-            el.querySelectorAll('th[data-key]').forEach(function (th) {
+            el.querySelectorAll(
+                'th[data-key], .tech-stacked-head-item[data-key]')
+                .forEach(function (th) {
 
-                th.addEventListener('dragover', function (ev) {
+                    th.addEventListener('dragover', function (ev) {
 
-                    if (!draggedKey || th.dataset.key === draggedKey) return;
+                        if (!draggedKey || th.dataset.key === draggedKey) return;
 
-                    ev.preventDefault();
+                        ev.preventDefault();
 
-                    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+                        if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
 
-                    clearDropState();
+                        clearDropState();
 
-                    th.classList.add('tech-col-drop-target');
-                });
-
-                th.addEventListener('dragleave', function () {
-
-                    th.classList.remove('tech-col-drop-target');
-                });
-
-                th.addEventListener('drop', function (ev) {
-
-                    ev.preventDefault();
-
-                    const targetKey = th.dataset.key;
-                    const sourceKey = draggedKey;
-
-                    draggedKey = null;
-
-                    clearDragState();
-
-                    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
-
-                    const sourceIndex = columns.findIndex(function (column) {
-                        return column.key === sourceKey;
+                        th.classList.add('tech-col-drop-target');
                     });
 
-                    const targetIndex = columns.findIndex(function (column) {
-                        return column.key === targetKey;
+                    th.addEventListener('dragleave', function () {
+
+                        th.classList.remove('tech-col-drop-target');
                     });
 
-                    if (sourceIndex < 0 || targetIndex < 0) return;
+                    th.addEventListener('drop', function (ev) {
 
-                    const moved = columns.splice(sourceIndex, 1)[0];
+                        ev.preventDefault();
 
-                    columns.splice(targetIndex, 0, moved);
+                        const targetKey = th.dataset.key;
+                        const sourceKey = draggedKey;
 
-                    saveColumnOrder();
+                        draggedKey = null;
 
-                    render();
+                        clearDragState();
+
+                        if (!sourceKey || !targetKey ||
+                            sourceKey === targetKey) return;
+
+                        const sourceIndex = columns.findIndex(function (column) {
+                            return column.key === sourceKey;
+                        });
+
+                        const targetIndex = columns.findIndex(function (column) {
+                            return column.key === targetKey;
+                        });
+
+                        if (sourceIndex < 0 || targetIndex < 0) return;
+
+                        const moved = columns.splice(sourceIndex, 1)[0];
+
+                        columns.splice(targetIndex, 0, moved);
+
+                        saveColumnOrder();
+
+                        render();
+                    });
                 });
-            });
         }
 
         // Column resize
@@ -3891,8 +4012,13 @@ Tech.register('grid', function (el) {
 
                     const th = handle.closest('th');
 
+                    // In the stacked two-row header the handle lives in a
+                    // band item instead of a per-column th.
+                    const headItem = handle.closest(
+                        '.tech-stacked-head-item');
+
                     const startX = ev.clientX;
-                    const startWidth = th.offsetWidth;
+                    const startWidth = (headItem || th).offsetWidth;
 
                     document.body.classList.add('tech-col-resizing');
 
@@ -3907,13 +4033,27 @@ Tech.register('grid', function (el) {
                             80,
                             isRtl ? startWidth - delta : startWidth + delta);
 
-                        th.style.width = width + 'px';
+                        if (headItem) headItem.style.flex =
+                            '0 1 ' + width + 'px';
+                        else th.style.width = width + 'px';
 
                         const column = columns.find(function (item) {
                             return item.key === key;
                         });
 
                         if (column) column.width = width;
+
+                        if (stackedRowsEnabled) {
+
+                            el.querySelectorAll('.tech-stacked-item')
+                                .forEach(function (item) {
+
+                                    if (item.dataset.key === key) {
+                                        item.style.flex =
+                                            '0 1 ' + width + 'px';
+                                    }
+                                });
+                        }
                     }
 
                     function onUp() {
@@ -4829,9 +4969,19 @@ Tech.register('grid', function (el) {
 
                 const cells = recordCells.get(index);
 
-                row.querySelectorAll('td[data-key]').forEach(function (cell) {
-                    cells.set(cell.dataset.key, cell);
-                });
+                row.querySelectorAll(
+                    'td[data-key], .tech-stacked-item[data-key]')
+                    .forEach(function (cell) {
+
+                        // In stacked mode only the value is exported,
+                        // without the inline column title.
+                        const valueCell =
+                            cell.classList.contains('tech-stacked-item')
+                                ? cell.querySelector('.tech-stacked-item-value')
+                                : null;
+
+                        cells.set(cell.dataset.key, valueCell || cell);
+                    });
             });
 
         Array.from(recordCells.keys())

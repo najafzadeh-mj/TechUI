@@ -195,22 +195,69 @@
    ========================================================= */
 
 .tech-grid-table-stacked .tech-stacked-title-row > td {
-    font-weight: 600;
-    padding-bottom: .25rem;
+    padding-bottom: .2rem;
 }
 
-.tech-grid-table-stacked .tech-stacked-title-cell,
-.tech-grid-table-stacked .tech-stacked-title-fill {
+.tech-grid-table-stacked .tech-stacked-title-cell {
     border-bottom-color: transparent;
 }
 
-.tech-grid-table-stacked .tech-stacked-title-cell + .tech-stacked-title-cell {
-    border-inline-start: 1px solid var(--tech-border);
+.tech-grid-table-stacked .tech-stacked-detail-row > td {
+    padding-top: .2rem;
+    border-top-color: transparent;
 }
 
-.tech-grid-table-stacked .tech-stacked-detail-row > td {
-    padding-top: .25rem;
-    border-top-color: transparent;
+/* Each line is a card-like band that starts at the row start. Column
+   titles live in the two-row header, not inside the record. */
+.tech-stacked-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 1.5rem;
+    row-gap: .2rem;
+}
+
+.tech-stacked-item {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.tech-stacked-item-value {
+    min-width: 0;
+}
+
+.tech-grid-table-stacked .tech-stacked-title-row .tech-stacked-item-value {
+    font-weight: 600;
+}
+
+/* Two-row header mirroring the record lines. */
+
+.tech-grid-table-stacked thead tr.tech-stacked-head-title-row th {
+    padding-bottom: .5rem;
+    border-bottom-color: transparent;
+}
+
+.tech-grid-table-stacked thead tr.tech-stacked-head-detail-row th {
+    top: var(--tech-stacked-header-h, 0px);
+    padding-top: .5rem;
+}
+
+.tech-grid-table-stacked thead th.tech-stacked-head-cell {
+    padding-block: .55rem;
+    white-space: normal;
+}
+
+.tech-grid-table-stacked .tech-stacked-head-item {
+    gap: .35rem;
+}
+
+.tech-grid-table-stacked .tech-stacked-head-title {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .tech-grid-table-stacked tbody tr.tech-stacked-title-row:hover + tr.tech-stacked-detail-row td,
@@ -657,7 +704,8 @@
 .tech-filter-clear-all:focus-visible,
 .tech-reorder-handle:focus-visible,
 .tech-grid-row-selectable:focus-visible,
-.tech-grid tbody td[data-key]:focus-visible {
+.tech-grid tbody td[data-key]:focus-visible,
+.tech-grid tbody .tech-stacked-item[data-key]:focus-visible {
     outline: 2px solid var(--tech-primary);
     outline-offset: -2px;
     border-radius: 8px;
@@ -817,9 +865,10 @@
    Column resize handle
    ========================================================= */
 
-.tech-grid thead th {
-    position: relative;
-}
+/* The sticky header already provides the positioning context the
+   absolutely positioned resize handle needs. Setting `relative`
+   here would cancel sticky and shift the second stacked header
+   row down by its `top` offset. */
 
 .tech-resize-handle {
     position: absolute;
