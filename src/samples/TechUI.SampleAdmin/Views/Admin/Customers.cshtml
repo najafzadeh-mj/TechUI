@@ -109,6 +109,63 @@
             .Width(125);
     }))
 
+<div class="mt-4 mb-2">
+    <h2 class="h6 mb-1">نمای دو سطری</h2>
+    <p class="text-muted small mb-0">
+        همان داده‌ها با چیدمان دو سطری: «نام» و «شهر» در سطر عنوان با عرض
+        دلخواه <code>.Width()</code> و پنج ستون دیگر در سطر دوم.
+    </p>
+</div>
+
+@(Html.Tech().Grid<Customer>()
+    .Name("customersStackedGrid")
+    .DataSource(ds => ds
+        .Read("CustomerGrid", "Admin")
+        .Type(TechHttpMethod.Post))
+    .Pageable()
+    .Sortable()
+    .StackedRows(2)
+    .PageSize(6)
+    .AriaLabel("جدول مشتریان با چیدمان دو سطری")
+    .Columns(c =>
+    {
+        c.Bound(x => x.FullName)
+            .Title("نام و نام خانوادگی")
+            .Width(240);
+
+        c.Bound(x => x.City)
+            .Title("شهر")
+            .Width(120);
+
+        c.Bound(x => x.Id)
+            .Title("شناسه")
+            .Width(85);
+
+        c.Bound(x => x.Email)
+            .Title("ایمیل")
+            .Width(230);
+
+        c.Template("{{= formatNumber(Credit) }} ریال")
+            .Title("اعتبار حساب")
+            .Width(150)
+            .Filterable(false);
+
+        c.Template("{{= formatDate(RegisteredOn) }}")
+            .Title("تاریخ عضویت")
+            .Width(130)
+            .Filterable(false);
+
+        c.Template(
+            "{{ if (IsActive) { }}" +
+            "<span class='badge bg-success'>فعال</span>" +
+            "{{ } else { }}" +
+            "<span class='badge bg-secondary'>غیرفعال</span>" +
+            "{{ } }}")
+            .Title("وضعیت")
+            .Width(100)
+            .Filterable(false);
+    }))
+
 @section Scripts {
     <script>
         function onCustomerCreate() {
